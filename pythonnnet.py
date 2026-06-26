@@ -267,13 +267,12 @@ def init_BPC(serial_Piezo):
 #     print('==================\n')
 # ========================================================================================
 def main():
-
-
+    SimulationManager.Instance.InitializeSimulations()
     DeviceManagerCLI.BuildDeviceList()
     print(DeviceManagerCLI.GetDeviceList())
 
     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
-    SimulationManager.Instance.InitializeSimulations()
+
     print(CH_X.DeviceID)
     print(CH_Y.DeviceID)
     print(CH_Z.DeviceID)
