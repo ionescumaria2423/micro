@@ -43,12 +43,12 @@ def main():
             if keyboard.is_pressed('esc'):
                 print('esc')
                 break
+
             elif keyboard.is_pressed('right'):
                 CH_X.MoveRelative(MotorDirection.Forward, stepSize, timeout)
                 time.sleep(0.2)
 
             elif keyboard.is_pressed('left'):
-
                 CH_X.MoveRelative(MotorDirection.Backward, stepSize, timeout)
                 time.sleep(0.2)
 
@@ -57,7 +57,6 @@ def main():
                 time.sleep(0.2)
 
             elif keyboard.is_pressed('down'):
-
                 CH_Y.MoveRelative(MotorDirection.Backward, stepSize, timeout)
                 time.sleep(0.2)
 
@@ -66,7 +65,6 @@ def main():
                 time.sleep(0.2)
 
             elif keyboard.is_pressed('s'):
-
                 CH_Z.MoveRelative(MotorDirection.Backward, stepSize, timeout)
                 time.sleep(0.2)
 
