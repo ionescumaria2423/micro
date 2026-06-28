@@ -1,6 +1,6 @@
 from nicegui import ui
 
-ui.label('Microscope Control').classes('text-h4')
+ui.label('Control').classes('text-h4')
 
 with ui.row():
 
@@ -14,8 +14,6 @@ with ui.row():
     # Controls
     with ui.column():
 
-        ui.label("Movement")
-
         with ui.row():
             ui.button("↑")
 
@@ -27,21 +25,9 @@ with ui.row():
         with ui.row():
             ui.button("↓")
 
-        ui.separator()
-
-        ui.label("Focus")
 
         ui.button("Z +")
         ui.button("Z -")
 
-        ui.separator()
-
-        ui.label("Step Size")
-
-        ui.slider(min=0.01, max=1, value=0.05)
-
-        ui.separator()
-
-        ui.button("Capture Image")
 
 ui.run()
