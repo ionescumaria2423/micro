@@ -4,7 +4,6 @@ import numpy as np
 from nicegui import ui
 from pylablib.devices import uc480
 
-# ---------------- UI ----------------
 ui.label('Control').classes('text-h4')
 
 with ui.row():
@@ -13,21 +12,17 @@ with ui.row():
         ui.label("Camera")
         camera_image = ui.interactive_image().style("width:640px;height:480px;")
 
-    with ui.column():
+    with ui.card():
+        ui.label("MATPLOTLIB")
+        ui.image("https://placehold.co/640x480?text=matplot").style(
+            "width:640px;height:480px")
 
-        with ui.row():
-            ui.button("↑")
+    with ui.card():
+        ui.label("telemetry")
+        ui.button('START')
+        ui.label('info care vine mai tarziu')
 
-        with ui.row():
-            ui.button("←")
-            ui.button("HOME ALL")
-            ui.button("→")
 
-        with ui.row():
-            ui.button("↓")
-
-        ui.button("Z +")
-        ui.button("Z -")
 
 cam = None
 
