@@ -23,7 +23,8 @@ from Thorlabs.MotionControl.GenericPiezoCLI.Settings import *
 from Thorlabs.MotionControl.GenericPiezoCLI.ControlParameters import *
 
 from init import *
-from interface import *
+
+
 
 def main():
     SimulationManager.Instance.InitializeSimulations()
@@ -40,8 +41,8 @@ def main():
 
     while True:
         try:
-            if keyboard.is_pressed('esc'):
-                print('esc')
+            if keyboard.is_pressed('Space'):
+                print('STOP')
                 break
 
             elif keyboard.is_pressed('right'):
