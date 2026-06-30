@@ -10,19 +10,67 @@ with ui.row():
 
     with ui.card():
         ui.label("Camera")
-        camera_image = ui.interactive_image().style("width:640px;height:480px;")
+        camera_image = ui.interactive_image().style("width:620px;height:480px;")
 
     with ui.card():
         ui.label("MATPLOTLIB")
         ui.image("https://placehold.co/640x480?text=matplot").style(
             "width:640px;height:480px")
 
-    with ui.card():
+    with ui.card().style("width:300px;height:480px;"):
         ui.label("telemetry")
         ui.button('START')
         ui.label('info care vine mai tarziu')
+with ui.row():
+    with ui.card():
+        ui.label("Stepper Control")
+        with ui.row():
+            ui.label("        ")
+            ui.label("Relative").classes('text-h5')
+            ui.label("        ")
+            ui.label("        ")
+            ui.label("        ")
+            ui.label("Absolute").classes('text-h5')
 
+        with ui.row():
+            ui.label("X")
+            ui.input('X rel').style('width: 80px')
+            ui.checkbox()
+            ui.input('X abs').style('width: 80px')
 
+        with ui.row():
+            ui.label("Y")
+            ui.input('Y rel').style('width: 80px')
+            ui.checkbox()
+            ui.input('Y abs').style('width: 80px')
+
+        with ui.row():
+            ui.label("Z")
+            ui.input('Z rel').style('width: 80px')
+            ui.checkbox()
+            ui.input('Z abs').style('width: 80px')
+
+        with ui.row():
+            ui.label("        ")
+            ui.button("<").style("width:40px;height:40px;")
+            ui.button(">").style("width:40px;height:40px;")
+            ui.label("        ")
+            ui.label("        ")
+            ui.label("        ")
+            ui.button("ABS").style("width:40px;height:40px;")
+
+        with ui.row():
+            ui.button("HOME").style("width:120px;height:40px;")
+            ui.button("STOP").style("width:120px;height:40px;")
+    with ui.card():
+        ui.label("Piezo Control")
+        ui.label("not yetttt")
+
+    with ui.card():
+        ui.label("Spectrometer")
+        ui.button('INTEG.TIME').style('width:200px;height:60px;')
+        ui.button('TAKE.BKG').style('width:200px;height:60px;')
+        ui.button("TAKE.SP").style('width:200px;height:60px;')
 
 cam = None
 
