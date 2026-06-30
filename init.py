@@ -90,6 +90,8 @@ def init_BSC(serial_Stepper):
 
         print(CH_X_config)
         print(CH_X_settings)
+
+
         return CH_X,CH_Y,CH_Z, stepper_device
 
     except Exception as e:

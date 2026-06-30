@@ -26,7 +26,7 @@ from init import *
 
 
 
-def main():
+def start():
     SimulationManager.Instance.InitializeSimulations()
     DeviceManagerCLI.BuildDeviceList()
     print(DeviceManagerCLI.GetDeviceList())
@@ -76,5 +76,5 @@ def main():
             break
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__start__':
+    start()

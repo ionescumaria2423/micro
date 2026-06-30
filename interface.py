@@ -2,7 +2,33 @@ import base64
 import cv2
 import numpy as np
 from nicegui import ui
+from numba.core.utils import chain_exception
 from pylablib.devices import uc480
+from merge import *
+
+SimulationManager.Instance.InitializeSimulations()
+state = {
+    'chx': False, 'chy': False, 'chz': False,
+    'xRel': 0.0,  'yRel': 0.0,  'zRel': 0.0
+}
+
+def moverelpos():
+    if state['chx']:
+        CH_X.MoveRelative(MotorDirection.Forward, float(state['xRel']), timeout)
+    if state['chy']:
+        CH_Y.MoveRelative(MotorDirection.Forward, float(state['yRel']), timeout)
+    if state['chz']:
+        CH_Z.MoveRelative(MotorDirection.Forward, float(state['zRel']), timeout)
+
+
+def moverelneg():
+    if state['chx']:
+        CH_X.MoveRelative(MotorDirection.Backward, float(state['xRel']), timeout)
+    if state['chy']:
+        CH_Y.MoveRelative(MotorDirection.Backward, float(state['yRel']), timeout)
+    if state['chz']:
+        CH_Z.MoveRelative(MotorDirection.Backward, float(state['zRel']), timeout)
+
 
 ui.label('Control').classes('text-h4')
 
@@ -19,7 +45,7 @@ with ui.row():
 
     with ui.card().style("width:300px;height:480px;"):
         ui.label("telemetry")
-        ui.button('START')
+        ui.button('START', on_click=init_BSC(serial_Stepper))
         ui.label('info care vine mai tarziu')
 with ui.row():
     with ui.card():
@@ -34,26 +60,28 @@ with ui.row():
 
         with ui.row():
             ui.label("X")
-            ui.input('X rel').style('width: 80px')
-            ui.checkbox()
+            ui.input(label='xRel').bind_value(state, 'xRel')
+            ui.checkbox().bind_value(state, 'chx')
             ui.input('X abs').style('width: 80px')
 
         with ui.row():
             ui.label("Y")
-            ui.input('Y rel').style('width: 80px')
-            ui.checkbox()
+            ui.input(label='yRel').bind_value(state, 'yRel')
+            ui.checkbox().bind_value(state, 'chy')
             ui.input('Y abs').style('width: 80px')
 
         with ui.row():
             ui.label("Z")
-            ui.input('Z rel').style('width: 80px')
-            ui.checkbox()
+            ui.input(label='zRel').bind_value(state, 'zRel')
+            ui.checkbox().bind_value(state, 'chz')
             ui.input('Z abs').style('width: 80px')
 
         with ui.row():
             ui.label("        ")
-            ui.button("<").style("width:40px;height:40px;")
-            ui.button(">").style("width:40px;height:40px;")
+            ui.button('<', on_click=moverelpos).style("width:40px;height:40px;")
+            ui.button('>', on_click=moverelneg).style("width:40px;height:40px;")
+            # ui.button("<",).style("width:40px;height:40px;")
+            # ui.button(">").style("width:40px;height:40px;")
             ui.label("        ")
             ui.label("        ")
             ui.label("        ")
