@@ -80,11 +80,13 @@ def init_BSC(serial_Stepper):
         CH_Z_config.UpdateCurrentConfiguration()
         CH_Z.SetSettings(CH_Z_settings, True, False)
 
+        print('homing')
+
         CH_X.Home(60000)
         CH_Y.Home(60000)
         CH_Z.Home(60000)
 
-        print('homing')
+        print('homed')
 
         print(CH_X_config)
         print(CH_X_settings)
@@ -92,8 +94,6 @@ def init_BSC(serial_Stepper):
 
     except Exception as e:
         print('Error handler!')
-
-
         print(e)
 
 

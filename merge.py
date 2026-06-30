@@ -23,6 +23,7 @@ from Thorlabs.MotionControl.GenericPiezoCLI.Settings import *
 from Thorlabs.MotionControl.GenericPiezoCLI.ControlParameters import *
 
 from init import *
+from interface import *
 
 def main():
     SimulationManager.Instance.InitializeSimulations()
@@ -35,10 +36,9 @@ def main():
     # print(CH_Y.DeviceID)
     # print(CH_Z.DeviceID)
     stepSize = Decimal(0.05)
-    # stepSize1 = Decimal(0.054999)
     timeout = 30000
 
-    while (True):
+    while True:
         try:
             if keyboard.is_pressed('esc'):
                 print('esc')
@@ -71,7 +71,7 @@ def main():
             time.sleep(0.01)
 
         except Exception as e:
-            print(f"An error occurred during movement: {e}")
+            print(f"error: {e}")
             break
 
 
