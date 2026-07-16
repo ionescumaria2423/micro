@@ -1,11 +1,14 @@
 import base64
 import cv2
+import clr
+import pythonnet
 import numpy as np
 from nicegui import ui, app
 from numba.core.utils import chain_exception
 from pylablib.devices import uc480
 from pyqtgraph.examples.relativity import Simulation
 from merge import *
+from System import Decimal
 
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
@@ -13,27 +16,81 @@ async def handle_startup():
 
 app.on_startup(handle_startup)
 
+CH_X = None
+CH_Y = None
+CH_Z = None
+stepper_device = None
+timeout = 30000
+
+def connect():
+    global CH_X, CH_Y, CH_Z, stepper_device
+    CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
+
 state = {
     'chx': False, 'chy': False, 'chz': False,
-    'xRel': 0.0,  'yRel': 0.0,  'zRel': 0.0
+    'xRel': 0.0,  'yRel': 0.0,  'zRel': 0.0,
+    'xAbs': 0.0,
+    'yAbs': 0.0,
+    'zAbs': 0.0
 }
 
 def moverelpos():
-    if state['chx']:
-        start.CH_X.MoveRelative(MotorDirection.Forward, float(state['xRel']), timeout)
-    if state['chy']:
-        CH_Y.MoveRelative(MotorDirection.Forward, float(state['yRel']), timeout)
-    if state['chz']:
-        CH_Z.MoveRelative(MotorDirection.Forward, float(state['zRel']), timeout)
+        if state['chx']:
+            CH_X.MoveRelative(
+                MotorDirection.Forward,
+                Decimal(state['xRel']),
+                timeout,
+            )
+
+        if state['chy']:
+            CH_Y.MoveRelative(
+                MotorDirection.Forward,
+                Decimal(state['yRel']),
+                timeout,
+            )
+
+        if state['chz']:
+            CH_Z.MoveRelative(
+                MotorDirection.Forward,
+                Decimal(state['zRel']),
+                timeout,
+            )
 
 
 def moverelneg():
     if state['chx']:
-        CH_X.MoveRelative(MotorDirection.Backward, float(state['xRel']), timeout)
+        CH_X.MoveRelative(
+            MotorDirection.Backward,
+            Decimal(state['xRel']),
+            timeout,
+        )
+
     if state['chy']:
-        CH_Y.MoveRelative(MotorDirection.Backward, float(state['yRel']), timeout)
+        CH_Y.MoveRelative(
+            MotorDirection.Backward,
+            Decimal(state['yRel']),
+            timeout,
+        )
+
     if state['chz']:
-        CH_Z.MoveRelative(MotorDirection.Backward, float(state['zRel']), timeout)
+        CH_Z.MoveRelative(
+            MotorDirection.Backward,
+            Decimal(state['zRel']),
+            timeout,
+        )
+
+
+
+def moveabs():
+        if state['chx']:
+            CH_X.MoveTo(Decimal(state['xAbs']), timeout)
+
+        if state['chy']:
+            CH_Y.MoveTo(Decimal(state['yAbs']), timeout)
+
+        if state['chz']:
+            CH_Z.MoveTo(Decimal(state['zAbs']), timeout)
+
 
 ui.label('Control').classes('text-h4')
 
@@ -50,7 +107,7 @@ with ui.row():
 
     with ui.card().style("width:300px;height:480px;"):
         ui.label("telemetry")
-        ui.button('START', on_click=lambda:init_BSC(serial_Stepper))
+        ui.button('START', on_click=lambda:connect())
         ui.label('info care vine mai tarziu')
 with ui.row():
     with ui.card():
@@ -67,19 +124,19 @@ with ui.row():
             ui.label("X")
             ui.number(label='xRel').bind_value(state, 'xRel')
             ui.checkbox().bind_value(state, 'chx')
-            ui.input(label='X abs').style('width: 80px')
+            ui.number(label='xAbs').bind_value(state, 'xAbs')
 
         with ui.row():
             ui.label("Y")
             ui.number(label='yRel').bind_value(state, 'yRel')
             ui.checkbox().bind_value(state, 'chy')
-            ui.input('Y abs').style('width: 80px')
+            ui.number(label='yAbs').bind_value(state, 'yAbs')
 
         with ui.row():
             ui.label("Z")
             ui.number(label='zRel').bind_value(state, 'zRel')
             ui.checkbox().bind_value(state, 'chz')
-            ui.input('Z abs').style('width: 80px')
+            ui.number(label='zAbs').bind_value(state, 'zAbs')
 
         with ui.row():
             ui.label("        ")
@@ -90,7 +147,7 @@ with ui.row():
             ui.label("        ")
             ui.label("        ")
             ui.label("        ")
-            ui.button("ABS").style("width:40px;height:40px;")
+            ui.button("ABS", on_click=moveabs).style("width:40px;height:40px;")
 
         with ui.row():
             ui.button("HOME").style("width:120px;height:40px;")
