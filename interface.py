@@ -9,6 +9,9 @@ from pylablib.devices import uc480
 from pyqtgraph.examples.relativity import Simulation
 from merge import *
 from System import Decimal
+import os
+import keyboard
+import threading
 
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
@@ -26,6 +29,7 @@ def connect():
     global CH_X, CH_Y, CH_Z, stepper_device
     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
 
+#__________________________________________________________________________________________________________________________________________
 state = {
     'chx': False, 'chy': False, 'chz': False,
     'xRel': 0.0,  'yRel': 0.0,  'zRel': 0.0,
@@ -79,8 +83,7 @@ def moverelneg():
             timeout,
         )
 
-
-
+#__________________________________________________________________________________________________________________________________________
 def moveabs():
         if state['chx']:
             CH_X.MoveTo(Decimal(state['xAbs']), timeout)
@@ -91,7 +94,44 @@ def moveabs():
         if state['chz']:
             CH_Z.MoveTo(Decimal(state['zAbs']), timeout)
 
+#__________________________________________________________________________________________________________________________________________
+def homeLaComanda():
+    if state['chx']:
+        CH_X.Home(60000)
 
+    if state['chy']:
+        CH_Y.Home(60000)
+
+    if state['chz']:
+        CH_Z.Home(60000)
+
+#__________________________________________________________________________________________________________________________________________
+def noMoreMove():
+    print("EMERGENCY STOP")
+
+    try:
+        if CH_X:
+            CH_X.StopImmediate()
+        if CH_Y:
+            CH_Y.StopImmediate()
+        if CH_Z:
+            CH_Z.StopImmediate()
+    except Exception as e:
+        print(e)
+
+    app.shutdown()
+
+
+# def listen_for_space():
+#     keyboard.wait('space')
+#     noMoreMove()
+#
+#
+# threading.Thread(target=listen_for_space, daemon=True).start()
+
+
+
+#__________________________________________________________________________________________________________________________________________
 ui.label('Control').classes('text-h4')
 
 with ui.row():
@@ -142,16 +182,14 @@ with ui.row():
             ui.label("        ")
             ui.button('<', on_click=moverelneg).style("width:40px;height:40px;")
             ui.button('>', on_click=moverelpos).style("width:40px;height:40px;")
-            # ui.button("<",).style("width:40px;height:40px;")
-            # ui.button(">").style("width:40px;height:40px;")
             ui.label("        ")
             ui.label("        ")
             ui.label("        ")
             ui.button("ABS", on_click=moveabs).style("width:40px;height:40px;")
 
         with ui.row():
-            ui.button("HOME").style("width:120px;height:40px;")
-            ui.button("STOP").style("width:120px;height:40px;")
+            ui.button("HOME", on_click=lambda:homeLaComanda()).style("width:120px;height:40px;")
+            ui.button("STOP", on_click=lambda:noMoreMove()).style("width:120px;height:40px;")
     with ui.card():
         ui.label("Piezo Control")
         ui.label("not yetttt")
@@ -161,6 +199,10 @@ with ui.row():
         ui.button('INTEG.TIME').style('width:200px;height:60px;')
         ui.button('TAKE.BKG').style('width:200px;height:60px;')
         ui.button("TAKE.SP").style('width:200px;height:60px;')
+
+
+
+#THORCAM__________________________________________________________________________________________________________________________________
 
 # cam = None
 
@@ -197,7 +239,7 @@ with ui.row():
 #
 #         cam = None
 
-
+#WEBCAM________________________________________________________________________________________________________________________________
 
 cap = None
 
@@ -228,6 +270,8 @@ def update_camera():
 
     except Exception as e:
         print(f"Error updating camera: {e}")
+
+#RUN_UI_____________________________________________________________________________________________________________________________________
 
 ui.timer(0.05, update_camera)
 
