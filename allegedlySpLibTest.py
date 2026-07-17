@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import spectra_lib as sp
+import spectrometerLib as sp
 simulation = True
 
 

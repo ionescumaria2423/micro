@@ -1,5 +1,6 @@
 import base64
 import cv2
+import spectrometerLib as sp
 import clr
 import pythonnet
 import numpy as np
@@ -13,21 +14,30 @@ import os
 import keyboard
 import threading
 
+
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
     SimulationManager.Instance.InitializeSimulations()
 
 app.on_startup(handle_startup)
 
+
 CH_X = None
 CH_Y = None
 CH_Z = None
 stepper_device = None
 timeout = 30000
+simulation = True
+
 
 def connect():
-    global CH_X, CH_Y, CH_Z, stepper_device
+    global CH_X, CH_Y, CH_Z, stepper_device, spectrometer
     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
+
+    # Create the spectrometer object as a global instance so other buttons can access it
+    spectrometer = sp.Ocean_Optics()
+    spectrometer.initSp(simulation=simulation)
+
 
 #__________________________________________________________________________________________________________________________________________
 state = {

@@ -10,7 +10,7 @@ cale_dll = os.path.join(folder_ooi, "NETOmniDriver-NET40.dll")
 
 
 class Ocean_Optics():
-    def __init__(self, simulation = False):
+    def initSp(self, simulation = False):
         if simulation:
             print(f"Simulare Spectrometru")
             self.simulation = simulation
