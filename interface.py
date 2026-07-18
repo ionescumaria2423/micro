@@ -4,7 +4,7 @@ import spectrometerLib as sp
 import clr
 import pythonnet
 import numpy as np
-from nicegui import ui, app
+from nicegui import ui, app, run
 from numba.core.utils import chain_exception
 from pylablib.devices import uc480
 from pyqtgraph.examples.relativity import Simulation
@@ -13,7 +13,7 @@ from System import Decimal
 import os
 import keyboard
 import threading
-
+import asyncio
 
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
@@ -116,7 +116,9 @@ def homeLaComanda():
         CH_Z.Home(60000)
 
 #__________________________________________________________________________________________________________________________________________
-def noMoreMove():
+
+
+async def noMoreMove():  # <-- Added 'async' here
     print("EMERGENCY STOP")
 
     try:
@@ -129,8 +131,11 @@ def noMoreMove():
     except Exception as e:
         print(e)
 
-    app.shutdown()
+    # CRUCIAL: Pause for a split second so the USB commands actually hit the hardware
+    # before the software process cuts its own throat.
+    await asyncio.sleep(0.1)
 
+    app.shutdown()
 
 # def listen_for_space():
 #     keyboard.wait('space')
@@ -281,8 +286,11 @@ def update_camera():
     except Exception as e:
         print(f"Error updating camera: {e}")
 
-#RUN_UI_____________________________________________________________________________________________________________________________________
 
 ui.timer(0.05, update_camera)
+
+#RUN_UI_____________________________________________________________________________________________________________________________________
+
+
 
 ui.run()
