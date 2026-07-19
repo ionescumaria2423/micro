@@ -1,29 +1,29 @@
 import base64
 import cv2
 import spectrometerLib as sp
-import clr
-import pythonnet
-import numpy as np
 from nicegui import ui, app, run
-from numba.core.utils import chain_exception
-from pylablib.devices import uc480
-from pyqtgraph.examples.relativity import Simulation
 from merge import *
 from System import Decimal
 import os
-import keyboard
-import threading
 import asyncio
 import time
 from pathlib import Path
+import keyboard
+import threading
+from numba.core.utils import chain_exception
+from pylablib.devices import uc480
+from pyqtgraph.examples.relativity import Simulation
+import clr
+import pythonnet
+import numpy as np
 
+#FUNCTIONS_________________________________________________________________________________________________________________________________
 
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
     SimulationManager.Instance.InitializeSimulations()
 
 app.on_startup(handle_startup)
-
 
 CH_X = None
 CH_Y = None
@@ -32,17 +32,15 @@ stepper_device = None
 timeout = 30000
 simulation = True
 
-
 def connect():
     global CH_X, CH_Y, CH_Z, stepper_device, spectrometer
     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
 
-    # Create the spectrometer object as a global instance so other buttons can access it
     spectrometer = sp.Ocean_Optics()
     spectrometer.initSp(simulation=simulation)
 
-
 #__________________________________________________________________________________________________________________________________________
+
 state = {
     'chx': False, 'chy': False, 'chz': False,
     'xRel': 0.0,  'yRel': 0.0,  'zRel': 0.0,
@@ -73,7 +71,6 @@ def moverelpos():
                 timeout,
             )
 
-
 def moverelneg():
     if state['chx']:
         CH_X.MoveRelative(
@@ -97,6 +94,7 @@ def moverelneg():
         )
 
 #__________________________________________________________________________________________________________________________________________
+
 def moveabs():
         if state['chx']:
             CH_X.MoveTo(Decimal(state['xAbs']), timeout)
@@ -108,6 +106,7 @@ def moveabs():
             CH_Z.MoveTo(Decimal(state['zAbs']), timeout)
 
 #__________________________________________________________________________________________________________________________________________
+
 def homeLaComanda():
     if state['chx']:
         CH_X.Home(60000)
@@ -120,8 +119,7 @@ def homeLaComanda():
 
 #__________________________________________________________________________________________________________________________________________
 
-
-async def noMoreMove():  # <-- Added 'async' here
+async def noMoreMove():
     print("EMERGENCY STOP")
 
     try:
@@ -134,55 +132,30 @@ async def noMoreMove():  # <-- Added 'async' here
     except Exception as e:
         print(e)
 
-    # CRUCIAL: Pause for a split second so the USB commands actually hit the hardware
-    # before the software process cuts its own throat.
     await asyncio.sleep(0.1)
 
     app.shutdown()
 
-# def listen_for_space():
-#     keyboard.wait('space')
-#     noMoreMove()
-#
-#
-# threading.Thread(target=listen_for_space, daemon=True).start()
-
-#__________________________________________________________________________________________________________________________________________
-
-# Create a folder named 'captures' in the current working directory if it doesn't exist
-SAVE_DIR = "captures"
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
-
-SAVE_DIR = "captures"
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
-
+#TAKE PIC__________________________________________________________________________________________________________________________________________
 
 def takePic():
     global cap
     try:
-        # 1. Force the save path straight to your laptop's main Downloads folder
         downloads_path = str(Path.home() / "Downloads")
 
-        # 2. Safety check: ensure your global webcam instance is actually active
         if cap is None or not cap.isOpened():
             ui.notify("Error: Camera stream is not active.", type='negative')
             return
 
-        # 3. Read directly from the ALREADY open global stream object
-        # (This avoids opening a 2nd channel or changing your update function)
         ret, frame = cap.read()
 
         if not ret or frame is None:
             ui.notify("Error: Could not grab frame from active stream.", type='negative')
             return
 
-        # 4. Generate absolute filename
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
 
-        # 5. Write the raw file using an absolute path string
         success = cv2.imwrite(filepath, frame)
 
         if success:
@@ -194,7 +167,8 @@ def takePic():
     except Exception as e:
         ui.notify(f"Snapshot Error: {e}", type='negative')
 
-#__________________________________________________________________________________________________________________________________________
+#UI BUILD__________________________________________________________________________________________________________________________________________
+
 ui.label('Control').classes('text-h4')
 
 with ui.row():
@@ -264,8 +238,6 @@ with ui.row():
         ui.button('TAKE.BKG').style('width:200px;height:60px;')
         ui.button("TAKE.SP").style('width:200px;height:60px;')
 
-
-
 #THORCAM__________________________________________________________________________________________________________________________________
 
 # cam = None
@@ -307,13 +279,11 @@ with ui.row():
 
 cap = None
 
-
 def get_camera():
     global cap
     if cap is None:
         cap = cv2.VideoCapture(0)
     return cap
-
 
 def update_camera():
     try:
@@ -335,33 +305,10 @@ def update_camera():
     except Exception as e:
         print(f"Error updating camera: {e}")
 
+#CAMERA UPDATE TIMER________________________________________________________________________________________________________________________
 
 ui.timer(0.05, update_camera)
 
-# def update_camera():
-#     global current_frame  # Tell Python we are updating the global variable
-#     try:
-#         camera = get_camera()
-#         ret, frame = camera.read()
-#
-#         if not ret:
-#             print("Failed to grab frame from webcam")
-#             return
-#
-#         current_frame = frame.copy()  # Save a fresh copy of the raw frame here
-#
-#         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#         _, jpg = cv2.imencode('.jpg', frame)
-#         encoded = base64.b64encode(jpg).decode("utf-8")
-#
-#         camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
-#
-#     except Exception as e:
-#         print(f"Error updating camera: {e}")
-#
-
 #RUN_UI_____________________________________________________________________________________________________________________________________
-
-
 
 ui.run()

@@ -87,7 +87,6 @@ class Ocean_Optics():
         else:
             self.wrapper.closeAllSpectrometers()
             print("Connection closed!")
-# ==========================================================
 
 
 # ==========================================================
