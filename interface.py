@@ -14,6 +14,9 @@ import os
 import keyboard
 import threading
 import asyncio
+import time
+from pathlib import Path
+
 
 async def handle_startup():
     print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
@@ -144,7 +147,52 @@ async def noMoreMove():  # <-- Added 'async' here
 #
 # threading.Thread(target=listen_for_space, daemon=True).start()
 
+#__________________________________________________________________________________________________________________________________________
 
+# Create a folder named 'captures' in the current working directory if it doesn't exist
+SAVE_DIR = "captures"
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
+
+SAVE_DIR = "captures"
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
+
+
+def takePic():
+    global cap
+    try:
+        # 1. Force the save path straight to your laptop's main Downloads folder
+        downloads_path = str(Path.home() / "Downloads")
+
+        # 2. Safety check: ensure your global webcam instance is actually active
+        if cap is None or not cap.isOpened():
+            ui.notify("Error: Camera stream is not active.", type='negative')
+            return
+
+        # 3. Read directly from the ALREADY open global stream object
+        # (This avoids opening a 2nd channel or changing your update function)
+        ret, frame = cap.read()
+
+        if not ret or frame is None:
+            ui.notify("Error: Could not grab frame from active stream.", type='negative')
+            return
+
+        # 4. Generate absolute filename
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
+
+        # 5. Write the raw file using an absolute path string
+        success = cv2.imwrite(filepath, frame)
+
+        if success:
+            ui.notify(f"SUCCESS! Saved to your Downloads folder!", type='positive')
+            print(f"Saved directly to absolute path: {filepath}")
+        else:
+            ui.notify("Write failed. Laptop disk permissions issue.", type='negative')
+
+    except Exception as e:
+        ui.notify(f"Snapshot Error: {e}", type='negative')
 
 #__________________________________________________________________________________________________________________________________________
 ui.label('Control').classes('text-h4')
@@ -154,6 +202,7 @@ with ui.row():
     with ui.card():
         ui.label("Camera")
         camera_image = ui.interactive_image().style("width:620px;height:480px;")
+        ui.button('TAKE PIC', on_click=takePic).classes('w-full')
 
     with ui.card():
         ui.label("MATPLOTLIB")
@@ -288,6 +337,28 @@ def update_camera():
 
 
 ui.timer(0.05, update_camera)
+
+# def update_camera():
+#     global current_frame  # Tell Python we are updating the global variable
+#     try:
+#         camera = get_camera()
+#         ret, frame = camera.read()
+#
+#         if not ret:
+#             print("Failed to grab frame from webcam")
+#             return
+#
+#         current_frame = frame.copy()  # Save a fresh copy of the raw frame here
+#
+#         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#         _, jpg = cv2.imencode('.jpg', frame)
+#         encoded = base64.b64encode(jpg).decode("utf-8")
+#
+#         camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
+#
+#     except Exception as e:
+#         print(f"Error updating camera: {e}")
+#
 
 #RUN_UI_____________________________________________________________________________________________________________________________________
 
