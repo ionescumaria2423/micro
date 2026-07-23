@@ -1,20 +1,14 @@
 import base64
 import cv2
 import spectrometerLib as sp
-from nicegui import ui, app, run
+from nicegui import ui, app
 from merge import *
 from System import Decimal
 import os
 import asyncio
 import time
 from pathlib import Path
-import keyboard
-import threading
-from numba.core.utils import chain_exception
 from pylablib.devices import uc480
-from pyqtgraph.examples.relativity import Simulation
-import clr
-import pythonnet
 import numpy as np
 
 #FUNCTIONS_________________________________________________________________________________________________________________________________

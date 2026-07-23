@@ -8,13 +8,7 @@ import os
 import asyncio
 import time
 from pathlib import Path
-import keyboard
-import threading
-from numba.core.utils import chain_exception
 from pylablib.devices import uc480
-from pyqtgraph.examples.relativity import Simulation
-import clr
-import pythonnet
 import numpy as np
 
 # THORLABS IMPORTS __________________________________________________________________________________________________________________________
@@ -93,7 +87,7 @@ async def connect():
     if camera_timer:
         camera_timer.deactivate()
 
-    ui.notify("Connecting to motion hardware...", type='info')
+    ui.notify("Init in progress", type='info')
 
     def _hardware_init():
         try:
