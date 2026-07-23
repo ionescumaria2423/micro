@@ -12,6 +12,20 @@ from pylablib.devices import uc480
 import numpy as np
 from Thorlabs.MotionControl.GenericPiezoCLI.Piezo import PiezoControlModeTypes
 
+import time
+import threading
+
+# 1. Define the shared stop signal directly inside functions.py
+stop_event = threading.Event()
+
+
+def handle_startup():
+    print("Application initialized.")
+
+
+
+
+
 async def handle_startup():
     print("UI layer successfully loaded.")
 

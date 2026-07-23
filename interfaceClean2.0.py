@@ -101,3 +101,6 @@ with ui.row():
 
 camera_timer = ui.timer(0.05, lambda: fn.update_camera(camera_image))
 ui.run()
+
+
+#set velocity -  in help
