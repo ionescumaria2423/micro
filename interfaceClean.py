@@ -200,7 +200,6 @@ async def noMoreMove():
     await asyncio.sleep(0.1)
     app.shutdown()
 
-# PIEZO CONTROL FUNCTIONS __________________________________________________________________________________________________________________
 
 def set_piezo(axis, mode):
     channels = {'X': PiezoCH_X, 'Y': PiezoCH_Y, 'Z': PiezoCH_Z}

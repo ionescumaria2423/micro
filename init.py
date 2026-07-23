@@ -80,13 +80,13 @@ def init_BSC(serial_Stepper):
         CH_Z_config.UpdateCurrentConfiguration()
         CH_Z.SetSettings(CH_Z_settings, True, False)
 
-        print('homing')
+        print('homing stepper')
 
         CH_X.Home(60000)
         CH_Y.Home(60000)
         CH_Z.Home(60000)
 
-        print('homed')
+        print('homing stepper done')
 
         print(CH_X_config)
         print(CH_X_settings)
@@ -148,6 +148,35 @@ def init_BPC(serial_Piezo):
     PiezoCH_Y.EnableDevice()
     PiezoCH_Z.EnableDevice()
     time.sleep(0.25)
+
+    def home_piezo_all():
+        channels = [PiezoCH_X, PiezoCH_Y, PiezoCH_Z]
+
+        state = {
+            'pzt_x_val': 0.0, 'pzt_y_val': 0.0, 'pzt_z_val': 0.0
+        }
+
+        for ch in channels:
+            if ch is not None:
+                try:
+                    # 1. Drive output voltage back to 0V
+                    ch.SetOutputVoltage(Decimal(0.0))
+
+                    # 2. Re-calibrate position strain gauge zero point (if supported)
+                    if hasattr(ch, 'Zero'):
+                        ch.Zero()
+
+                except Exception as e:
+                    print(f"Error homing piezo channel: {e}")
+
+        print('homing piezo')
+
+        state['pzt_x_val'] = 0.0
+        state['pzt_y_val'] = 0.0
+        state['pzt_z_val'] = 0.0
+        print('homing piezo done')
+
+    home_piezo_all()
 
 
     return PiezoCH_X,PiezoCH_Y,PiezoCH_Z, piezo_device
