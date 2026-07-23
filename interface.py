@@ -18,26 +18,61 @@ import pythonnet
 import numpy as np
 
 #FUNCTIONS_________________________________________________________________________________________________________________________________
-
 async def handle_startup():
-    print("UI layer successfully loaded. Initializing Thorlabs Simulations...")
-    SimulationManager.Instance.InitializeSimulations()
-
+    print("UI layer successfully loaded.")
+    # SimulationManager.Instance.InitializeSimulations()
 app.on_startup(handle_startup)
 
 CH_X = None
 CH_Y = None
 CH_Z = None
 stepper_device = None
+
+PiezoCH_X = None
+PiezoCH_Y = None
+PiezoCH_Z = None
+piezo_device = None
+
 timeout = 30000
-simulation = True
+
+# THREAD-SAFE REAL CONNECT __________________________________________________________________________________________________________________
 
 def connect():
-    global CH_X, CH_Y, CH_Z, stepper_device, spectrometer
-    CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
+    global CH_X, CH_Y, CH_Z, stepper_device
+    global PiezoCH_X,PiezoCH_Y,PiezoCH_Z, piezo_device
+    global cam
 
-    spectrometer = sp.Ocean_Optics()
-    spectrometer.initSp(simulation=simulation)
+    try:
+        from Thorlabs.MotionControl.DeviceManagerCLI import DeviceManagerCLI
+        DeviceManagerCLI.BuildDeviceList()
+    except Exception as e:
+        print("DeviceManager CLI issue:", e)
+
+    CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
+    PiezoCH_X, PiezoCH_Y, PiezoCH_Z, piezo_device = init_BPC(serial_Piezo)
+
+    for ch in [CH_X, CH_Y, CH_Z, PiezoCH_X,PiezoCH_Y,PiezoCH_Z]:
+        if ch is not None:
+            if not ch.IsConnected:
+                ch.Connect(serial_Stepper)
+                ch.Connect(serial_Piezo)
+            ch.StartPolling(250)
+            ch.EnableDevice()
+    time.sleep(0.5)
+    cam = get_camera()
+    ui.notify("Hardware and Camera re-connected!", type='positive')
+
+
+
+#SIMULATION CONNECT
+# def connect():
+#     global CH_X, CH_Y, CH_Z, stepper_device, spectrometer
+#     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
+#
+    #spectrometer = sp.Ocean_Optics()
+   # spectrometer.initSp(simulation=simulation)
+
+
 
 #__________________________________________________________________________________________________________________________________________
 
@@ -50,43 +85,51 @@ state = {
 }
 
 def moverelpos():
-        if state['chx']:
-            CH_X.MoveRelative(
-                MotorDirection.Forward,
-                Decimal(state['xRel']),
-                timeout,
-            )
+    if CH_X is None or CH_Y is None or CH_Z is None:
+        ui.notify("Please click START to connect hardware first!", type='warning')
+        return
 
-        if state['chy']:
-            CH_Y.MoveRelative(
-                MotorDirection.Forward,
-                Decimal(state['yRel']),
-                timeout,
-            )
+    if state['chx'] and CH_X:
+        CH_X.MoveRelative(
+            MotorDirection.Forward,
+            Decimal(state['xRel']),
+            timeout,
+        )
 
-        if state['chz']:
-            CH_Z.MoveRelative(
-                MotorDirection.Forward,
-                Decimal(state['zRel']),
-                timeout,
-            )
+    if state['chy'] and CH_Y:
+        CH_Y.MoveRelative(
+            MotorDirection.Forward,
+            Decimal(state['yRel']),
+            timeout,
+        )
+
+    if state['chz'] and CH_Z:
+        CH_Z.MoveRelative(
+            MotorDirection.Forward,
+            Decimal(state['zRel']),
+            timeout,
+        )
 
 def moverelneg():
-    if state['chx']:
+    if CH_X is None or CH_Y is None or CH_Z is None:
+        ui.notify("Please click START to connect hardware first!", type='warning')
+        return
+
+    if state['chx'] and CH_X:
         CH_X.MoveRelative(
             MotorDirection.Backward,
             Decimal(state['xRel']),
             timeout,
         )
 
-    if state['chy']:
+    if state['chy'] and CH_Y:
         CH_Y.MoveRelative(
             MotorDirection.Backward,
             Decimal(state['yRel']),
             timeout,
         )
 
-    if state['chz']:
+    if state['chz'] and CH_Z:
         CH_Z.MoveRelative(
             MotorDirection.Backward,
             Decimal(state['zRel']),
@@ -138,20 +181,60 @@ async def noMoreMove():
 
 #TAKE PIC__________________________________________________________________________________________________________________________________________
 
+#FOR WEBCAM
+
+ # def takePic():
+ #    global cap
+ #    try:
+ #        downloads_path = str(Path.home() / "Downloads")
+ #
+ #        if cap is None or not cap.isOpened():
+ #            ui.notify("Error: Camera stream is not active.", type='negative')
+ #            return
+ #
+ #        ret, frame = cap.read()
+ #
+ #        if not ret or frame is None:
+ #            ui.notify("Error: Could not grab frame from active stream.", type='negative')
+ #            return
+ #
+ #        timestamp = time.strftime("%Y%m%d-%H%M%S")
+ #        filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
+ #
+ #        success = cv2.imwrite(filepath, frame)
+ #
+ #        if success:
+ #            ui.notify(f"SUCCESS! Saved to your Downloads folder!", type='positive')
+ #            print(f"Saved directly to absolute path: {filepath}")
+ #        else:
+ #            ui.notify("Write failed. Laptop disk permissions issue.", type='negative')
+ #
+ #    except Exception as e:
+ #        ui.notify(f"Snapshot Error: {e}", type='negative')
+#
+
+# FOR THORCAM_____________________________________________________________________________________________________________________________
+
 def takePic():
-    global cap
     try:
         downloads_path = str(Path.home() / "Downloads")
 
-        if cap is None or not cap.isOpened():
-            ui.notify("Error: Camera stream is not active.", type='negative')
+        camera = get_camera()
+        if camera is None:
+            ui.notify("Error: Camera initialization failed.", type='negative')
             return
 
-        ret, frame = cap.read()
+        frame = camera.snap()
 
-        if not ret or frame is None:
+        if frame is None or frame.size == 0:
             ui.notify("Error: Could not grab frame from active stream.", type='negative')
             return
+
+        frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+        frame = frame.astype(np.uint8)
+
+        if len(frame.shape) == 2 or frame.shape[2] == 1:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
@@ -159,13 +242,14 @@ def takePic():
         success = cv2.imwrite(filepath, frame)
 
         if success:
-            ui.notify(f"SUCCESS! Saved to your Downloads folder!", type='positive')
+            ui.notify("SUCCESS! Saved to your Downloads folder!", type='positive')
             print(f"Saved directly to absolute path: {filepath}")
         else:
-            ui.notify("Write failed. Laptop disk permissions issue.", type='negative')
+            ui.notify("Write failed. Disk permissions issue.", type='negative')
 
     except Exception as e:
         ui.notify(f"Snapshot Error: {e}", type='negative')
+
 
 #UI BUILD__________________________________________________________________________________________________________________________________________
 
@@ -240,62 +324,24 @@ with ui.row():
 
 #THORCAM__________________________________________________________________________________________________________________________________
 
-# cam = None
-
-# def get_camera():
-#     global cam
-#     if cam is None:
-#         cam = uc480.UC480Camera()
-#     return cam
-#
-# def update_camera():
-#     global cam
-#
-#     try:
-#         cam = get_camera()
-#         frame = cam.snap()
-#
-#         frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
-#         frame = frame.astype(np.uint8)
-#         frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-#
-#         _, jpg = cv2.imencode('.jpg', frame)
-#         encoded = base64.b64encode(jpg).decode("utf-8")
-#
-#         camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
-#
-#     except Exception as e:
-#         print("Camera error:", e)
-#
-#
-#         try:
-#             cam.close()
-#         except:
-#             pass
-#
-#         cam = None
-
-#WEBCAM________________________________________________________________________________________________________________________________
-
-cap = None
+cam = None
 
 def get_camera():
-    global cap
-    if cap is None:
-        cap = cv2.VideoCapture(0)
-    return cap
+    global cam
+    if cam is None:
+        cam = uc480.UC480Camera()
+    return cam
 
 def update_camera():
+    global cam
+
     try:
-        camera = get_camera()
-        ret, frame = camera.read()
+        cam = get_camera()
+        frame = cam.snap()
 
-        if not ret:
-            print("Failed to grab frame from webcam")
-            return
-
-
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+        frame = frame.astype(np.uint8)
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
         _, jpg = cv2.imencode('.jpg', frame)
         encoded = base64.b64encode(jpg).decode("utf-8")
@@ -303,8 +349,46 @@ def update_camera():
         camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
 
     except Exception as e:
-        print(f"Error updating camera: {e}")
+        print("Camera error:", e)
 
+
+        try:
+            cam.close()
+        except:
+            pass
+
+        cam = None
+
+#WEBCAM________________________________________________________________________________________________________________________________
+
+# cap = None
+#
+# def get_camera():
+#     global cap
+#     if cap is None:
+#         cap = cv2.VideoCapture(0)
+#     return cap
+#
+# def update_camera():
+#     try:
+#         camera = get_camera()
+#         ret, frame = camera.read()
+#
+#         if not ret:
+#             print("Failed to grab frame from webcam")
+#             return
+#
+#
+#         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#
+#         _, jpg = cv2.imencode('.jpg', frame)
+#         encoded = base64.b64encode(jpg).decode("utf-8")
+#
+#         camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
+#
+#     except Exception as e:
+#         print(f"Error updating camera: {e}")
+#
 #CAMERA UPDATE TIMER________________________________________________________________________________________________________________________
 
 ui.timer(0.05, update_camera)
