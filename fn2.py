@@ -1,9 +1,14 @@
+# Inside functions.py
+import asyncio
+from nicegui import run
+from System import Decimal
+
 import base64
 import cv2
 import spectrometerLib as sp
 from nicegui import ui, app, run
 from merge import *
-from System import Decimal
+
 import os
 import asyncio
 import time
@@ -14,6 +19,73 @@ from Thorlabs.MotionControl.GenericPiezoCLI.Piezo import PiezoControlModeTypes
 
 import time
 import threading
+
+# Timeout set to 60000ms (60s) for accurate positioning
+TIMEOUT = 60000
+
+
+async def moveabs():
+    """Moves selected axes to absolute positions asynchronously."""
+    tasks = []
+
+    if state.get('chx') and getattr(fn, 'CH_X', None):
+        target = Decimal(float(state['xAbs']))
+        tasks.append(run.io_bound(CH_X.MoveTo, target, TIMEOUT))
+
+    if state.get('chy') and getattr(fn, 'CH_Y', None):
+        target = Decimal(float(state['yAbs']))
+        tasks.append(run.io_bound(CH_Y.MoveTo, target, TIMEOUT))
+
+    if state.get('chz') and getattr(fn, 'CH_Z', None):
+        target = Decimal(float(state['zAbs']))
+        tasks.append(run.io_bound(CH_Z.MoveTo, target, TIMEOUT))
+
+    if tasks:
+        await asyncio.gather(*tasks)
+
+
+async def moverelpos():
+    """Moves selected axes by relative positive distance asynchronously."""
+    tasks = []
+
+    if state.get('chx') and getattr(fn, 'CH_X', None):
+        dist = Decimal(float(state['xRel']))
+        tasks.append(run.io_bound(CH_X.MoveRelative, 1, dist, TIMEOUT))  # 1 = Positive direction
+
+    if state.get('chy') and getattr(fn, 'CH_Y', None):
+        dist = Decimal(float(state['yRel']))
+        tasks.append(run.io_bound(CH_Y.MoveRelative, 1, dist, TIMEOUT))
+
+    if state.get('chz') and getattr(fn, 'CH_Z', None):
+        dist = Decimal(float(state['zRel']))
+        tasks.append(run.io_bound(CH_Z.MoveRelative, 1, dist, TIMEOUT))
+
+    if tasks:
+        await asyncio.gather(*tasks)
+
+
+async def moverelneg():
+    """Moves selected axes by relative negative distance asynchronously."""
+    tasks = []
+
+    if state.get('chx') and getattr(fn, 'CH_X', None):
+        dist = Decimal(float(state['xRel']))
+        tasks.append(run.io_bound(CH_X.MoveRelative, 2, dist, TIMEOUT))  # 2 = Negative direction
+
+    if state.get('chy') and getattr(fn, 'CH_Y', None):
+        dist = Decimal(float(state['yRel']))
+        tasks.append(run.io_bound(CH_Y.MoveRelative, 2, dist, TIMEOUT))
+
+    if state.get('chz') and getattr(fn, 'CH_Z', None):
+        dist = Decimal(float(state['zRel']))
+        tasks.append(run.io_bound(CH_Z.MoveRelative, 2, dist, TIMEOUT))
+
+    if tasks:
+        await asyncio.gather(*tasks)
+
+
+
+
 
 # 1. Define the shared stop signal directly inside functions.py
 stop_event = threading.Event()
@@ -146,40 +218,11 @@ state = {
     'pzt_x_val': 0.0, 'pzt_y_val': 0.0, 'pzt_z_val': 0.0
 }
 
-def moverelpos():
-    if CH_X is None or CH_Y is None or CH_Z is None:
-        ui.notify("Please click START to init first!", type='warning')
-        return
 
-    if state['chx'] and CH_X:
-        CH_X.MoveRelative(MotorDirection.Forward, Decimal(state['xRel']), timeout)
-    if state['chy'] and CH_Y:
-        CH_Y.MoveRelative(MotorDirection.Forward, Decimal(state['yRel']), timeout)
-    if state['chz'] and CH_Z:
-        CH_Z.MoveRelative(MotorDirection.Forward, Decimal(state['zRel']), timeout)
 
-def moverelneg():
-    if CH_X is None or CH_Y is None or CH_Z is None:
-        ui.notify("Please click START to init first!", type='warning')
-        return
 
-    if state['chx'] and CH_X:
-        CH_X.MoveRelative(MotorDirection.Backward, Decimal(state['xRel']), timeout)
-    if state['chy'] and CH_Y:
-        CH_Y.MoveRelative(MotorDirection.Backward, Decimal(state['yRel']), timeout)
-    if state['chz'] and CH_Z:
-        CH_Z.MoveRelative(MotorDirection.Backward, Decimal(state['zRel']), timeout)
 
-def moveabs():
-    if CH_X is None or CH_Y is None or CH_Z is None:
-        ui.notify("Please click START to init first!", type='warning')
-        return
-    if state['chx'] and CH_X:
-        CH_X.MoveTo(Decimal(state['xAbs']), timeout)
-    if state['chy'] and CH_Y:
-        CH_Y.MoveTo(Decimal(state['yAbs']), timeout)
-    if state['chz'] and CH_Z:
-        CH_Z.MoveTo(Decimal(state['zAbs']), timeout)
+
 
 def homeLaComanda():
     if CH_X is None or CH_Y is None or CH_Z is None:
