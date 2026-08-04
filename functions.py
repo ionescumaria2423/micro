@@ -40,47 +40,47 @@ piezo_device = None
 
 timeout = 30000
 
-# cam = None
-# camera_consecutive_errors = 0
-# camera_timer = None
-#
-# def get_camera():
-#     global cam
-#     if cam is None:
-#         cam = uc480.UC480Camera()
-#     return cam
-#
-# def update_camera(camera_image):
-#     global cam, camera_consecutive_errors
-#
-#     try:
-#         camera = get_camera()
-#         frame = camera.snap()
-#
-#         if frame is not None and frame.size > 0:
-#             frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
-#             frame = frame.astype(np.uint8)
-#             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-#
-#             _, jpg = cv2.imencode('.jpg', frame)
-#             encoded = base64.b64encode(jpg).decode("utf-8")
-#
-#             camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
-#             camera_consecutive_errors = 0
-#
-#     except Exception as e:
-#         camera_consecutive_errors += 1
-#         print(f"Camera frame drop ({camera_consecutive_errors}):", e)
-#
-#         if camera_consecutive_errors > 5:
-#             print("Resetting camera connection...")
-#             try:
-#                 if cam:
-#                     cam.close()
-#             except:
-#                 pass
-#             cam = None
-#             camera_consecutive_errors = 0
+cam = None
+camera_consecutive_errors = 0
+camera_timer = None
+
+def get_camera():
+    global cam
+    if cam is None:
+        cam = uc480.UC480Camera()
+    return cam
+
+def update_camera(camera_image):
+    global cam, camera_consecutive_errors
+
+    try:
+        camera = get_camera()
+        frame = camera.snap()
+
+        if frame is not None and frame.size > 0:
+            frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+            frame = frame.astype(np.uint8)
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+
+            _, jpg = cv2.imencode('.jpg', frame)
+            encoded = base64.b64encode(jpg).decode("utf-8")
+
+            camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
+            camera_consecutive_errors = 0
+
+    except Exception as e:
+        camera_consecutive_errors += 1
+        print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+
+        if camera_consecutive_errors > 5:
+            print("Resetting camera connection...")
+            try:
+                if cam:
+                    cam.close()
+            except:
+                pass
+            cam = None
+            camera_consecutive_errors = 0
 
 
 async def connect():
@@ -466,51 +466,48 @@ async def zero_piezo_all_1(mode='Voltage (V)'):
     await set_piezo_all(mode)
 
 
-cam = None
-camera_consecutive_errors = 0
-camera_timer = None
-
-
-def get_camera():
-    global cam
-    if cam is None:
-        # 0 is usually the default built-in webcam.
-        # Change to 1 or 2 if you have multiple cameras connected.
-        cam = cv2.VideoCapture(0)
-    return cam
-
-
-def update_camera(camera_image):
-    global cam, camera_consecutive_errors
-
-    try:
-        camera = get_camera()
-
-        # Read frame from webcam (ret is boolean success, frame is the image numpy array)
-        ret, frame = camera.read()
-
-        if ret and frame is not None and frame.size > 0:
-            # Webcams natively capture in BGR; convert to RGB for UI display
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            _, jpg = cv2.imencode('.jpg', frame)
-            encoded = base64.b64encode(jpg).decode("utf-8")
-
-            camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
-            camera_consecutive_errors = 0
-        else:
-            raise Exception("Failed to grab frame from webcam")
-
-    except Exception as e:
-        camera_consecutive_errors += 1
-        print(f"Camera frame drop ({camera_consecutive_errors}):", e)
-
-        if camera_consecutive_errors > 5:
-            print("Resetting camera connection...")
-            try:
-                if cam:
-                    cam.release()  # cv2.VideoCapture uses release() instead of close()
-            except:
-                pass
-            cam = None
-            camera_consecutive_errors = 0
+# cam = None
+# camera_consecutive_errors = 0
+# camera_timer = None
+#
+#
+# def get_camera():
+#     global cam
+#     if cam is None:
+#         cam = cv2.VideoCapture(0)
+#     return cam
+#
+#
+# def update_camera(camera_image):
+#     global cam, camera_consecutive_errors
+#
+#     try:
+#         camera = get_camera()
+#
+#         ret, frame = camera.read()
+#
+#         if ret and frame is not None and frame.size > 0:
+#             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#
+#             _, jpg = cv2.imencode('.jpg', frame)
+#             encoded = base64.b64encode(jpg).decode("utf-8")
+#
+#             camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
+#             camera_consecutive_errors = 0
+#         else:
+#             raise Exception("Failed to grab frame from webcam")
+#
+#     except Exception as e:
+#         camera_consecutive_errors += 1
+#         print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+#
+#         if camera_consecutive_errors > 5:
+#             print("Resetting camera connection...")
+#             try:
+#                 if cam:
+#                     cam.release()
+#             except:
+#                 pass
+#             cam = None
+#             camera_consecutive_errors = 0
+#

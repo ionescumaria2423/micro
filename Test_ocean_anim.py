@@ -3,7 +3,7 @@ from matplotlib.animation import FuncAnimation
 import spectra_lib as sp
 
 
-simulation = True
+simulation = False
 integr_time = 10000
 
 # ========================================
@@ -36,9 +36,9 @@ class AnimateSpectro:
 # ===============================================================================
 # main
 # ===============================================================================
-sp_device = sp.Ocean_Optics(simulation = simulation)
+sp_device = sp.OceanOptics(simulation = simulation)
 sp_device.set_integration_time(integr_time)
-wavelengths = sp_device.get_wavelength()
+wavelengths = sp_device.get_wavelengths()
 
 # ===========================================
 fig, ax = plt.subplots()
