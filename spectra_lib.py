@@ -1,154 +1,179 @@
-import ctypes
+from io import BytesIO
 import os
 import sys
+import clr
+import matplotlib.pyplot as plt
 import numpy as np
 
-# ====================================================================================
-# Ocean Insight OmniDriver Paths Configuration
-# ====================================================================================
-FOLDER_OOI = r"C:\Program Files\Ocean Optics\OmniDriver\OOI_HOME"
-PATH_DLL = os.path.join(FOLDER_OOI, "NETOmniDriver-NET40.dll")
+# ==========================================================
+# OmniDriver Setup
+# ==========================================================
 
-# Load required native dependencies (C++ binaries, WinUSB drivers, Java Runtime)
-if os.path.exists(FOLDER_OOI):
-    critical_paths = [
-        FOLDER_OOI,
-        os.path.join(FOLDER_OOI, "bin"),
-        os.path.join(FOLDER_OOI, "jre", "bin"),
-        os.path.join(FOLDER_OOI, "jre", "bin", "server"),
-    ]
+DLL_PATH = (
+    r"C:\Program Files\Ocean Optics\OmniDriver\OOI_HOME\NETOmniDriver-NET40.dll"
+)
 
-    for p in critical_paths:
-        if os.path.exists(p):
-            os.environ["PATH"] = p + os.pathsep + os.environ.get("PATH", "")
-            if hasattr(os, "add_dll_directory"):
-                try:
-                    os.add_dll_directory(p)
-                except Exception:
-                    pass
+if not os.path.exists(DLL_PATH):
+  raise FileNotFoundError(DLL_PATH)
 
-    # Force Windows DLL loader to look inside OOI_HOME
-    try:
-        ctypes.windll.kernel32.SetDllDirectoryW(FOLDER_OOI)
-    except Exception:
-        pass
+DLL_DIR = os.path.dirname(DLL_PATH)
 
-    # Pre-load jvm.dll into process memory to prevent 0x80004005 exception in C++ wrapper
-    jvm_path = os.path.join(FOLDER_OOI, "jre", "bin", "server", "jvm.dll")
-    if os.path.exists(jvm_path):
-        try:
-            ctypes.CDLL(jvm_path)
-        except Exception:
-            pass
+if DLL_DIR not in sys.path:
+  sys.path.insert(0, DLL_DIR)
+
+if hasattr(os, "add_dll_directory"):
+  os.add_dll_directory(DLL_DIR)
+
+clr.AddReference(DLL_PATH)
+
+from OmniDriver import NETWrapper
+
+
+# ==========================================================
+# Ocean Optics Spectrometer
+# ==========================================================
 
 
 class OceanOptics:
-    """Wrapper class for Ocean Insight spectrometers using OmniDriver .NET library."""
 
-    def __init__(self, simulation: bool = False):
-        self.simulation = simulation
-        self.wrapper = None
-        self.spec_index = 0
+  def __init__(self, simulation=False):
+    self.simulation = simulation
+    self.wrapper = None
+    self.spec_index = 0
 
-        if self.simulation:
-            print("[INFO] Simulation mode explicitly enabled.")
-            return
+    if simulation:
+      print("[SIMULATION] Spectrometer simulation enabled.")
+      return
 
-        if not os.path.exists(PATH_DLL):
-            print(f"[ERROR] DLL not found at: {PATH_DLL}")
-            print("[INFO] Falling back to Simulation mode.")
-            self.simulation = True
-            return
+    print("Initializing Ocean Optics spectrometer...")
+    self.wrapper = NETWrapper()
 
-        current_dir = os.getcwd()
+    try:
+      self.wrapper.closeAllSpectrometers()
+    except:
+      pass
 
-        try:
-            os.chdir(FOLDER_OOI)
-            import clr
+    count = self.wrapper.openAllSpectrometers()
 
-            clr.AddReference(PATH_DLL)
-            from OmniDriver import NETWrapper
+    try:
+      count = self.wrapper.getNumberOfSpectrometersFound()
+    except:
+      pass
 
-            print("Initializing Ocean Insight OmniDriver engine...")
-            self.wrapper = NETWrapper()
+    if count <= 0:
+      raise RuntimeError("No Ocean Optics spectrometer detected.")
 
-            print("Scanning USB ports for spectrometers...")
-            spectrometer_count = self.wrapper.openAllSpectrometers()
+    self.model = self.wrapper.getName(0)
+    self.serial = self.wrapper.getSerialNumber(0)
 
-            if spectrometer_count > 0:
-                self.spec_index = 0
-                model_name = self.wrapper.getName(self.spec_index)
-                serial_num = self.wrapper.getSerialNumber(self.spec_index)
-                print(f"[CONNECTED] {model_name} (S/N: {serial_num})")
-            else:
-                print(
-                    "[WARNING] No spectrometer detected on USB. Falling back to Simulation mode."
-                )
-                self.simulation = True
+    print("Driver: NatUSBWin_64")
+    print(f"Detected {count} spectrometer(s)")
+    print(f"Model : {self.model}")
+    print(f"Serial: {self.serial}")
 
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize hardware driver: {e}")
-            print("[INFO] Falling back to Simulation mode.")
-            self.simulation = True
-            self.wrapper = None
+  def set_integration_time(self, integration_time):
+    if self.simulation:
+      return
+    self.wrapper.setIntegrationTime(self.spec_index, int(integration_time))
 
-        finally:
-            os.chdir(current_dir)
+  def get_wavelengths(self):
+    if self.simulation:
+      return np.linspace(350, 1000, 1024)
+    return np.asarray(
+        self.wrapper.getWavelengths(self.spec_index), dtype=float
+    )
 
-    def set_integration_time(self, microseconds: int = 50000) -> None:
-        """Sets the integration time in microseconds."""
-        if self.simulation or self.wrapper is None:
-            print(f"[SIMULATION] Integration time set to {microseconds} µs")
-        else:
-            self.wrapper.setIntegrationTime(self.spec_index, microseconds)
+  def get_intensities(self):
+    if self.simulation:
+      x = np.linspace(350, 1000, 1024)
+      return 2000 * np.exp(-((x - 650) / 25) ** 2) + np.random.normal(
+          0, 10, len(x)
+      )
+    return np.asarray(self.wrapper.getSpectrum(self.spec_index), dtype=float)
 
-    def get_wavelengths(self) -> list:
-        """Returns the array of wavelengths for the connected spectrometer."""
-        if self.simulation or self.wrapper is None:
-            return list(np.linspace(200, 800, 100))
-        else:
-            return list(self.wrapper.getWavelengths(self.spec_index))
-
-    def get_intensities(self) -> list:
-        """Acquires a spectrum and returns the array of intensities."""
-        if self.simulation or self.wrapper is None:
-            x = np.linspace(200, 800, 100)
-            return list(np.exp(-((500 - x) ** 2) / 1000))
-        else:
-            return list(self.wrapper.getSpectrum(self.spec_index))
-
-    def close(self) -> None:
-        """Closes connection to all spectrometers."""
-        if self.simulation or self.wrapper is None:
-            print("[SIMULATION] Connection closed.")
-        else:
-            try:
-                self.wrapper.closeAllSpectrometers()
-                print("Spectrometer connection closed successfully.")
-            except Exception as e:
-                print(f"Error while closing connection: {e}")
+  def close(self):
+    if self.simulation:
+      return
+    try:
+      self.wrapper.closeAllSpectrometers()
+    except:
+      pass
 
 
-# ====================================================================================
-# Test / Usage Example
-# ====================================================================================
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+# ==========================================================
+# Plot Class
+# ==========================================================
 
-    # Set simulation=False to connect to real hardware
-    sp_device = OceanOptics(simulation=False)
 
-    sp_device.set_integration_time(100000)
-    wavelengths = sp_device.get_wavelengths()
-    intensities = sp_device.get_intensities()
+class SpectrometerPlot:
 
-    # Plot acquired spectrum
-    fig, ax = plt.subplots()
-    ax.plot(wavelengths, intensities, label="Spectrum")
-    ax.set_xlabel("Wavelength (nm)")
-    ax.set_ylabel("Intensity (counts)")
-    ax.set_title("Ocean Insight Spectrometer Measurement")
-    ax.grid(True)
+  def __init__(self, spectrometer):
+    self.sp = spectrometer
+    self.wavelengths = self.sp.get_wavelengths()
+    self.fig, self.ax = plt.subplots(figsize=(6, 4), dpi=100)
+    self.line, = self.ax.plot(
+        self.wavelengths,
+        np.zeros_like(self.wavelengths),
+        color="blue",
+        linewidth=0.8,
+    )
+    self.ax.set_xlabel("Wavelength (nm)")
+    self.ax.set_ylabel("Intensity")
+    self.ax.grid(True)
+    self.fig.tight_layout()
+
+  def update(self):
+    y = self.sp.get_intensities()
+    self.line.set_ydata(y)
+    self.ax.set_xlim(self.wavelengths.min(), self.wavelengths.max())
+    ymin, ymax = np.min(y), np.max(y)
+    if ymin == ymax:
+      ymax += 1
+    self.ax.set_ylim(ymin, ymax)
+    self.fig.canvas.draw()
+
+  def get_png(self):
+    self.update()
+    buffer = BytesIO()
+    self.fig.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
+    buffer.seek(0)
+    return buffer.read()
+
+  def show(self):
     plt.show()
 
-    sp_device.close()
+  def close(self):
+    plt.close(self.fig)
+
+
+# ==========================================================
+# Singleton instances
+# ==========================================================
+
+_device = None
+_plot = None
+
+
+def get_spectrometer(simulation=False):
+  global _device
+  if _device is None:
+    _device = OceanOptics(simulation)
+    _device.set_integration_time(10000)
+  return _device
+
+
+def get_plot(simulation=False):
+  global _plot
+  if _plot is None:
+    _plot = SpectrometerPlot(get_spectrometer(simulation))
+  return _plot
+
+
+def close():
+  global _device, _plot
+  if _plot is not None:
+    _plot.close()
+    _plot = None
+  if _device is not None:
+    _device.close()
+    _device = None

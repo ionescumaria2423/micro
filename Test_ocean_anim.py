@@ -2,58 +2,46 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import spectra_lib as sp
 
-
 simulation = False
 integr_time = 10000
 
-# ========================================
+sp_device = sp.OceanOptics(simulation=simulation)
+sp_device.set_integration_time(integr_time)
+
+wavelengths = sp_device.get_wavelengths()
+
+
 class AnimateSpectro:
-    global wavelengths
+
     def __init__(self, ax):
-        self.line, = ax.plot([], [], 'b-', linewidth=0.5)
-        self.x = wavelengths
         self.ax = ax
-        self.ax.grid(True)
-        #self.ax.legend([nume_model +', S/N: '+ serial])
+        self.line, = ax.plot([], [], lw=0.5)
 
-    def __call__(self, i):
-        # This way the plot can continuously run and we just keep
-        # watching new realizations of the process
-        if i == 0:
-            self.line.set_data([], [])
-            return self.line,
+    def __call__(self, frame):
 
-        # self.x = sp_device.get_wavelength()
         y = sp_device.get_intensities()
-        self.line.set_data(self.x, y)
-        # Set up plot parameters
-        self.ax.set_xlim(min(self.x), max(self.x))
-        self.ax.set_ylim(min(y), max(y))
+
+        self.line.set_data(wavelengths, y)
+
+        self.ax.set_xlim(wavelengths.min(), wavelengths.max())
+        self.ax.set_ylim(y.min(), y.max())
 
         return self.line,
 
 
-# ===============================================================================
-# main
-# ===============================================================================
-sp_device = sp.OceanOptics(simulation = simulation)
-sp_device.set_integration_time(integr_time)
-wavelengths = sp_device.get_wavelengths()
-
-# ===========================================
 fig, ax = plt.subplots()
-fig.tight_layout()
-ax.set_xlabel('Wavelengths (nm)')
-ax.set_ylabel('Intensity')
-# ===========================================
 
-ud = AnimateSpectro(ax)
+ax.set_xlabel("Wavelength (nm)")
+ax.set_ylabel("Intensity")
+ax.grid(True)
 
-# ===========================================
-print("Achiziționez spectru în timp real...")
-anim = FuncAnimation(fig, ud, frames=100, interval=100, blit=True)
+ani = FuncAnimation(
+    fig,
+    AnimateSpectro(ax),
+    interval=100,
+    blit=True
+)
+
 plt.show()
 
-
-# ===========================================
 sp_device.close()
