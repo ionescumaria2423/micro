@@ -1,14 +1,11 @@
 import functions as fn
 from nicegui import app, ui
 
-# Register startup handler
 app.on_startup(fn.handle_startup)
 
 ui.label('Control').classes('text-h4')
 
-# =========================================================================
-# TOP ROW: CAMERA, PLOT, TELEMETRY
-# =========================================================================
+
 with ui.row():
   with ui.card():
     ui.label('Camera')
@@ -36,11 +33,18 @@ with ui.row():
   with ui.card().style('width:300px;height:480px;'):
     ui.label('telemetry')
     ui.button('START', on_click=fn.connect)
-    ui.label('info care vine mai tarziu')
+    with ui.row():
+        ui.number(label='ΔX - MICROMETERS').bind_value(fn.state, 'deltaX')
+        ui.number(label='ΔY - MICROMETERS').bind_value(fn.state, 'deltaY')
+    with ui.row():
+        ui.number(label='Nx').bind_value(fn.state, 'nx')
+        ui.number(label='Ny').bind_value(fn.state, 'ny')
+    with ui.row():
+        ui.button('SPECTRO SCAN', on_click=fn.specroScan)
 
-# =========================================================================
-# BOTTOM ROW: STEPPER, PIEZO, SPECTROMETER
-# =========================================================================
+
+
+
 with ui.row():
   with ui.card():
     ui.label('Stepper Control')
@@ -145,13 +149,11 @@ with ui.row():
         'width:200px;height:60px;'
     )
 
-# =========================================================================
-# REFRESH TIMERS
-# =========================================================================
 camera_timer = ui.timer(0.05, lambda: fn.update_camera(camera_image))
 ui.timer(0.1, lambda: fn.update_plot(plot_ui))
 
-# Store camera timer reference globally for enable/disable during init
 fn.camera_timer = camera_timer
 
 ui.run()
+
+#STEP SIZE - 60 NANOMETRI 

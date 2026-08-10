@@ -6,31 +6,22 @@ from pathlib import Path
 import time
 from nicegui import app, run, ui
 import spectra_lib as sp
-
-# 1. Import merge FIRST (Configures sys.path and clr references for Thorlabs DLLs)
 from merge import *
-
-# 2. Thorlabs .NET / Kinesis Assemblies
 from System import Decimal
 from Thorlabs.MotionControl.GenericPiezoCLI.Piezo import PiezoControlModeTypes
-
-# 3. Third-Party & Standard Libraries
 import cv2
 import matplotlib
-
-matplotlib.use("Agg")  # Headless backend to prevent GUI thread popups
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from pylab import Thorlabs
 
-# Camera Driver
+
 try:
   from pylablib.devices import uc480
 except ImportError:
   uc480 = None
 
-# ===============================================================================
-# GLOBAL STATE & HARDWARE HANDLES
-# ===============================================================================
 state = {
     "chx": False,
     "chy": False,
@@ -44,15 +35,19 @@ state = {
     "pzt_x_val": 0.0,
     "pzt_y_val": 0.0,
     "pzt_z_val": 0.0,
+    "deltaX":0.0,
+    "deltaY":0.0,
+    "nx":0.0,
+    "ny":0.0,
 }
 
-# Stepper Controllers
+
 CH_X = None
 CH_Y = None
 CH_Z = None
 stepper_device = None
 
-# Piezo Controllers
+
 PiezoCH_X = None
 PiezoCH_Y = None
 PiezoCH_Z = None
@@ -61,15 +56,13 @@ piezo_device = None
 timeout = 30000
 stop_requested = False
 
-# Camera Handles
+
 cam = None
 camera_consecutive_errors = 0
 camera_timer = None
 
 
-# ===============================================================================
-# APPLICATION STARTUP & HARDWARE CONNECT
-# ===============================================================================
+
 def handle_startup():
   print("Application initialized.")
 
@@ -96,7 +89,6 @@ async def connect():
     except Exception as dev_err:
       print("DeviceManager CLI issue:", dev_err)
 
-    # Ensure serial variables are handled or imported properly from merge
     s_step = globals().get("serial_Stepper", "")
     s_piezo = globals().get("serial_Piezo", "")
 
@@ -146,9 +138,7 @@ async def connect():
       camera_timer.activate()
 
 
-# ===============================================================================
-# CAMERA CONTROL & SNAPSHOTS
-# ===============================================================================
+
 def get_camera():
   global cam
   if cam is None and uc480 is not None:
@@ -229,9 +219,7 @@ def takePic():
     ui.notify(f"Snapshot Error: {e}", type="negative")
 
 
-# ===============================================================================
-# STEPPER MOTOR ROUTINES
-# ===============================================================================
+
 def moverelpos():
   if CH_X is None or CH_Y is None or CH_Z is None:
     ui.notify("Please click START to init first!", type="warning")
@@ -301,9 +289,6 @@ async def noMoreMove():
   app.shutdown()
 
 
-# ===============================================================================
-# PIEZO CONTROL ROUTINES
-# ===============================================================================
 def set_piezo(axis, mode):
   channels = {"X": PiezoCH_X, "Y": PiezoCH_Y, "Z": PiezoCH_Z}
   ch = channels.get(axis)
@@ -342,9 +327,7 @@ def zero_piezo_all(mode="Voltage (V)"):
   set_piezo_all(mode)
 
 
-# ===============================================================================
-# SPECTROMETER HARDWARE & LIVE ANIMATED STREAM (PLOTLY INTERACTIVE)
-# ===============================================================================
+
 integr_time = 10000
 _device_instance = None
 _wavelengths_instance = None
@@ -438,7 +421,7 @@ def update_plot(plot_ui_element):
       y = raw_y
       y_axis_title = 'Intensity (counts)'
 
-    # Update data and layout keys on the underlying Plotly figure dictionary
+
     plot_ui_element.figure['data'] = [{
         'x': wavelengths.tolist(),
         'y': y.tolist(),
@@ -448,8 +431,86 @@ def update_plot(plot_ui_element):
     }]
     plot_ui_element.figure['layout']['yaxis']['title'] = y_axis_title
 
-    # Push updates to the browser interface
     plot_ui_element.update()
 
   except Exception as e:
     print(f'Error updating plot: {e}')
+
+
+def specroScan():
+  nx = int(state['nx'])
+  ny = int(state['ny'])
+
+  delta_x = state['deltaX']
+  delta_y = state['deltaY']
+
+  step_x = Decimal(delta_x/nx)
+  step_y = Decimal(delta_y/ny)
+
+  sx = Decimal(float(delta_x/nx)*0.01)
+  sy = Decimal(float(delta_y/ny)*0.01)
+
+  s=Decimal(float(delta_x//3))
+  d=Decimal(float(delta_y//3))
+
+  a=Decimal(float(delta_x%3))
+  b=Decimal(float(delta_y%3))
+
+  print(f"Starting Scan: nx={nx}, ny={ny}, deltaX={delta_x}, deltaY={delta_y}")
+
+
+  if delta_x <= 4 or delta_y <= 4:
+    for i in range(ny):
+
+
+      for j in range(nx):
+        target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
+        print(f" -> Moving Piezo X to: {target_x}")
+        PiezoCH_X.SetPosition(target_x)
+        time.sleep(0.05)
+
+      target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
+      print(f"Moving Piezo Y to: {target_y}")
+      PiezoCH_Y.SetPosition(target_y)
+      time.sleep(0.05)
+
+
+  elif delta_x > 4 and delta_y > 4 and sx>=0.6 and sy>=0.6:
+    for i in range(ny):
+      for j in range(nx):
+
+        CH_X.MoveRelative(MotorDirection.Forward, sx, timeout)
+        time.sleep(0.05)
+
+      CH_Y.MoveRelative(MotorDirection.Forward, sy, timeout)
+
+      CH_X.MoveRelative(MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
+      time.sleep(0.05)
+
+
+  else:
+    n=PiezoCH_X.get_position()
+    m=PiezoCH_Y.get_position()
+    s=CH_X.get_position
+    for i in range (ny):
+      for j in range (nx):
+
+        if (PiezoCH_X.get_position() + step_x)>3:
+          a=3-PiezoCH_X.get_position()
+          PiezoCH_X.SetPosition(n)
+          CH_X.MoveRelative(MotorDirection.Forward, 0.03, timeout)
+          PiezoCH_X.SetPosition(PiezoCH_X.get_position() + step_x - a)
+          time.sleep(0.05)
+
+        elif(CH_X.get_position() * 0.01 + step_x > delta_x):
+          PiezoCH_X.SetPosition(n)
+          CH_X.MoveTo(s, timeout)
+          time.sleep(0.05)
+
+        else:
+          PiezoCH_X.SetPosition(PiezoCH_X.get_position + step_x)
+          time.sleep(0.05)
+
+
+
+

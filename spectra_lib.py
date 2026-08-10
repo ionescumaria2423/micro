@@ -5,9 +5,7 @@ import clr
 import matplotlib.pyplot as plt
 import numpy as np
 
-# ==========================================================
-# OmniDriver Setup
-# ==========================================================
+
 
 DLL_PATH = (
     r"C:\Program Files\Ocean Optics\OmniDriver\OOI_HOME\NETOmniDriver-NET40.dll"
@@ -29,9 +27,7 @@ clr.AddReference(DLL_PATH)
 from OmniDriver import NETWrapper
 
 
-# ==========================================================
-# Ocean Optics Spectrometer
-# ==========================================================
+
 
 
 class OceanOptics:
@@ -100,9 +96,7 @@ class OceanOptics:
       pass
 
 
-# ==========================================================
-# Plot Class
-# ==========================================================
+
 
 
 class SpectrometerPlot:
@@ -146,9 +140,6 @@ class SpectrometerPlot:
     plt.close(self.fig)
 
 
-# ==========================================================
-# Singleton instances
-# ==========================================================
 
 _device = None
 _plot = None
