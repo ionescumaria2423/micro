@@ -13,8 +13,14 @@ import cv2
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+# from pylab import Thorlabs
+# from decimal import Decimal
+import json
+import time
 import numpy as np
-from pylab import Thorlabs
+import pandas as pd
+import plotly.express as px
+from nicegui import ui
 
 
 try:
@@ -437,80 +443,212 @@ def update_plot(plot_ui_element):
     print(f'Error updating plot: {e}')
 
 
-def specroScan():
-  nx = int(state['nx'])
-  ny = int(state['ny'])
+# def specroScan():
+#   nx = int(state['nx'])
+#   ny = int(state['ny'])
+#
+#   delta_x = state['deltaX']
+#   delta_y = state['deltaY']
+#
+#   step_x = Decimal(delta_x/nx)
+#   step_y = Decimal(delta_y/ny)
+#
+#   sx = Decimal(float(delta_x/nx)*0.01)
+#   sy = Decimal(float(delta_y/ny)*0.01)
+#
+#   s=Decimal(float(delta_x//3))
+#   d=Decimal(float(delta_y//3))
+#
+#   a=Decimal(float(delta_x%3))
+#   b=Decimal(float(delta_y%3))
+#
+#   print(f"Starting Scan: nx={nx}, ny={ny}, deltaX={delta_x}, deltaY={delta_y}")
+#
+#
+#   if delta_x <= 4 or delta_y <= 4:
+#     for i in range(ny):
+#
+#
+#       for j in range(nx):
+#         target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
+#         print(f" -> Moving Piezo X to: {target_x}")
+#         PiezoCH_X.SetPosition(target_x)
+#         time.sleep(0.05)
+#
+#       target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
+#       print(f"Moving Piezo Y to: {target_y}")
+#       PiezoCH_Y.SetPosition(target_y)
+#       time.sleep(0.05)
+#
+#
+#
+# elif delta_x > 4 and delta_y > 4 and sx>=0.6 and sy>=0.6:
+  # else:
+  #   for i in range(ny):
+  #     for j in range(nx):
+  #
+  #       CH_X.MoveRelative(MotorDirection.Forward, sx, timeout)
+  #       time.sleep(0.05)
+  #
+  #     CH_Y.MoveRelative(MotorDirection.Forward, sy, timeout)
+  #
+  #     CH_X.MoveRelative(MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
+  #     time.sleep(0.05)
 
-  delta_x = state['deltaX']
-  delta_y = state['deltaY']
 
-  step_x = Decimal(delta_x/nx)
-  step_y = Decimal(delta_y/ny)
+  #else:
+  #   n=PiezoCH_X.get_position()
+  #   m=PiezoCH_Y.get_position()
+  #   s=CH_X.get_position
+  #   for i in range (ny):
+  #     for j in range (nx):
+  #
+  #       if (PiezoCH_X.get_position() + step_x)>3:
+  #         a=3-PiezoCH_X.get_position()
+  #         PiezoCH_X.SetPosition(n)
+  #         CH_X.MoveRelative(MotorDirection.Forward, 0.03, timeout)
+  #         PiezoCH_X.SetPosition(PiezoCH_X.get_position() + step_x - a)
+  #         time.sleep(0.05)
+  #
+  #       elif(CH_X.get_position() * 0.01 + step_x > delta_x):
+  #         PiezoCH_X.SetPosition(n)
+  #         CH_X.MoveTo(s, timeout)
+  #         time.sleep(0.05)
+  #
+  #       else:
+  #         PiezoCH_X.SetPosition(PiezoCH_X.get_position + step_x)
+  #         time.sleep(0.05)
 
-  sx = Decimal(float(delta_x/nx)*0.01)
-  sy = Decimal(float(delta_y/ny)*0.01)
+global_scan_data = []
 
-  s=Decimal(float(delta_x//3))
-  d=Decimal(float(delta_y//3))
 
-  a=Decimal(float(delta_x%3))
-  b=Decimal(float(delta_y%3))
+def _run_heavy_scan(current_state):
+  scan_data = []
+  nx = int(current_state["nx"])
+  ny = int(current_state["ny"])
+  delta_x = current_state["deltaX"]
+  delta_y = current_state["deltaY"]
+  device = sp.get_spectrometer(simulation=False)
 
-  print(f"Starting Scan: nx={nx}, ny={ny}, deltaX={delta_x}, deltaY={delta_y}")
 
+
+  sx = Decimal(float(delta_x / nx) * 0.01)
+  sy = Decimal(float(delta_y / ny) * 0.01)
 
   if delta_x <= 4 or delta_y <= 4:
     for i in range(ny):
-
-
-      for j in range(nx):
-        target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
-        print(f" -> Moving Piezo X to: {target_x}")
-        PiezoCH_X.SetPosition(target_x)
-        time.sleep(0.05)
-
       target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
-      print(f"Moving Piezo Y to: {target_y}")
       PiezoCH_Y.SetPosition(target_y)
       time.sleep(0.05)
 
-
-  elif delta_x > 4 and delta_y > 4 and sx>=0.6 and sy>=0.6:
-    for i in range(ny):
       for j in range(nx):
-
-        CH_X.MoveRelative(MotorDirection.Forward, sx, timeout)
+        target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
+        PiezoCH_X.SetPosition(target_x)
         time.sleep(0.05)
 
-      CH_Y.MoveRelative(MotorDirection.Forward, sy, timeout)
+        time.sleep(integr_time * 0.001 + 0.05)
 
-      CH_X.MoveRelative(MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
+        wavelengths = device.get_wavelengths()
+        intensities = device.get_intensities()
+        peak_intensity = float(np.max(intensities))
+
+        scan_data.append({
+            "x": float(target_x),
+            "y": float(target_y),
+            "peak_intensity": peak_intensity,
+            "wavelengths": wavelengths.tolist(),
+            "intensities": intensities.tolist(),
+        })
+  else:
+    for i in range(ny):
+      for j in range(nx):
+        CH_X.MoveRelative(MotorDirection.Forward, sx, timeout)
+        time.sleep(integr_time * 0.001 + 0.05)
+
+        wavelengths = device.get_wavelengths()
+        intensities = device.get_intensities()
+        peak_intensity = float(np.max(intensities))
+
+        scan_data.append({
+            "x": j,
+            "y": i,
+            "peak_intensity": peak_intensity,
+            "wavelengths": wavelengths.tolist(),
+            "intensities": intensities.tolist(),
+        })
+
+      CH_Y.MoveRelative(MotorDirection.Forward, sy, timeout)
+      CH_X.MoveRelative(
+          MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout
+      )
       time.sleep(0.05)
 
-
-  else:
-    n=PiezoCH_X.get_position()
-    m=PiezoCH_Y.get_position()
-    s=CH_X.get_position
-    for i in range (ny):
-      for j in range (nx):
-
-        if (PiezoCH_X.get_position() + step_x)>3:
-          a=3-PiezoCH_X.get_position()
-          PiezoCH_X.SetPosition(n)
-          CH_X.MoveRelative(MotorDirection.Forward, 0.03, timeout)
-          PiezoCH_X.SetPosition(PiezoCH_X.get_position() + step_x - a)
-          time.sleep(0.05)
-
-        elif(CH_X.get_position() * 0.01 + step_x > delta_x):
-          PiezoCH_X.SetPosition(n)
-          CH_X.MoveTo(s, timeout)
-          time.sleep(0.05)
-
-        else:
-          PiezoCH_X.SetPosition(PiezoCH_X.get_position + step_x)
-          time.sleep(0.05)
+  return scan_data
 
 
+async def specroScan():
+  global global_scan_data
+  ui.notify("Scan started...", type="info")
+
+  try:
+    current_state = dict(state)
+
+    global_scan_data = await run.io_bound(_run_heavy_scan, current_state)
+
+    if global_scan_data:
+      ui.notify("Scan complete! Generating map...", type="positive")
+      show_map_dialog()
+    else:
+      ui.notify("Scan finished, but no data was collected.", type="warning")
+
+  except Exception as e:
+    print(f"ERROR DURING SCAN: {e}")
+    ui.notify(f"Error during scan: {e}", type="negative")
 
 
+def show_map_dialog():
+  df = pd.DataFrame(global_scan_data)
+
+  fig = px.scatter(
+      df,
+      x="x",
+      y="y",
+      color="peak_intensity",
+      color_continuous_scale="Viridis",
+      title="2D Spectrometer Scan Map",
+      labels={
+          "x": "X Position",
+          "y": "Y Position",
+          "peak_intensity": "Peak Intensity",
+      },
+  )
+  fig.update_layout(
+      xaxis=dict(scaleanchor="y", scaleratio=1),
+      margin=dict(l=20, r=20, t=40, b=20),
+  )
+
+  with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
+    ui.label("Scan Results Map").classes("text-h6 font-bold")
+    ui.plotly(fig).classes("w-full h-[500px]")
+
+    with ui.row().classes("w-full justify-end gap-2 mt-auto"):
+      # Robust download trigger using a data URI and JavaScript
+      json_str = json.dumps(global_scan_data, indent=4)
+
+      def download_json():
+        ui.run_javascript(f"""
+                const blob = new Blob([{json.dumps(json_str)}], {{type: 'application/json'}});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'all_spectrums_data.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            """)
+
+      ui.button("Save JSON", on_click=download_json).props("color=green")
+      ui.button("Close", on_click=map_dialog.close).props("color=red flat")
+
+    map_dialog.open()

@@ -149,6 +149,8 @@ with ui.row():
         'width:200px;height:60px;'
     )
 
+
+
 camera_timer = ui.timer(0.05, lambda: fn.update_camera(camera_image))
 ui.timer(0.1, lambda: fn.update_plot(plot_ui))
 
@@ -156,4 +158,4 @@ fn.camera_timer = camera_timer
 
 ui.run()
 
-#STEP SIZE - 60 NANOMETRI 
+#STEP SIZE - 60 NANOMETRI
