@@ -601,6 +601,7 @@ def show_map_dialog():
       ui.button("Save JSON", on_click=download_json).props("color=green")
       ui.button("Save PNG", on_click=download_png).props("color=green")
       ui.button("Close", on_click=map_dialog.close).props("color=red flat")
+      ui.button("STOP SCAN", on_click=stopScan).props("color=red flat")
 
     map_dialog.open()
 
