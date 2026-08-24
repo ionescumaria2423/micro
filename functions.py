@@ -1,3 +1,7 @@
+#FUNCTIONS FILE
+
+
+#IMPORTS=======================================================================================================================================
 import asyncio
 import base64
 import io
@@ -21,6 +25,10 @@ import plotly.express as px
 from nicegui import ui
 import kaleido
 import plotly.graph_objects as go
+
+
+#STATES========================================================================================================================================
+
 
 try:
   from pylablib.devices import uc480
@@ -73,10 +81,10 @@ cam = None
 camera_consecutive_errors = 0
 camera_timer = None
 
+#INITIALIZATION AND CONNECT======================================================================================================================
 
 def handle_startup():
   print("Application initialized.")
-
 
 async def connect():
   global CH_X, CH_Y, CH_Z, stepper_device
@@ -147,6 +155,8 @@ async def connect():
       camera_timer.activate()
 
 
+#CAMERA========================================================================================================================================
+
 
 def get_camera():
   global cam
@@ -178,10 +188,10 @@ def update_camera(camera_image):
 
   except Exception as e:
     camera_consecutive_errors += 1
-    #print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+    print(f"Camera frame drop ({camera_consecutive_errors}):", e)
 
     if camera_consecutive_errors > 5:
-      #print("Resetting camera connection...")
+      print("Resetting camera connection...")
       try:
         if cam:
           cam.close()
@@ -227,6 +237,8 @@ def takePic():
   except Exception as e:
     ui.notify(f"Snapshot Error: {e}", type="negative")
 
+
+#STEPPER CONTROLS================================================================================================================================
 
 
 def moverelpos():
@@ -298,6 +310,8 @@ async def noMoreMove():
   app.shutdown()
 
 
+#PIEZO CONTROLS==================================================================================================================================
+
 def set_piezo(axis, mode):
   channels = {"X": PiezoCH_X, "Y": PiezoCH_Y, "Z": PiezoCH_Z}
   ch = channels.get(axis)
@@ -335,6 +349,224 @@ def zero_piezo_all(mode="Voltage (V)"):
   state["pzt_z_val"] = 0.0
   set_piezo_all(mode)
 
+#LIVE POSITIONS==================================================================================================================================
+
+def update_live_positions():
+  global CH_X, CH_Y, CH_Z, PiezoCH_X, PiezoCH_Y, PiezoCH_Z
+  try:
+    if CH_X is not None:
+      if hasattr(CH_X, "Position"):
+        state["x_live_pos"] = float(str(CH_X.Position))
+
+    if CH_Y is not None:
+      if hasattr(CH_Y, "Position"):
+        state["y_live_pos"] = float(str(CH_Y.Position))
+
+    if CH_Z is not None:
+      if hasattr(CH_Z, "Position"):
+        state["z_live_pos"] = float(str(CH_Z.Position))
+
+    if PiezoCH_X is not None and hasattr(PiezoCH_X, "GetPosition"):
+      state["pzt_x_live"] = float(str(PiezoCH_X.GetPosition()))
+
+    if PiezoCH_Y is not None and hasattr(PiezoCH_Y, "GetPosition"):
+      state["pzt_y_live"] = float(str(PiezoCH_Y.GetPosition()))
+
+    if PiezoCH_Z is not None and hasattr(PiezoCH_Z, "GetPosition"):
+      state["pzt_z_live"] = float(str(PiezoCH_Z.GetPosition()))
+
+  except Exception as e:
+    print(f"Error with data update: {e}")
+
+
+#LIVE SPECTROMETER SCAN=================================================================================================================
+
+
+def StopScan():
+  global stopScan
+  stopScan = True
+  ui.notify(f"stop scan", type="negative")
+
+async def specroScan_live():
+  global stopScan
+  stopScan = False
+  client = ui.context.client
+  asyncio.create_task(_run_specro_scan_live_background(client))
+
+
+async def _run_specro_scan_live_background(client):
+  with client:
+    global global_scan_data, stopScan
+    ui.notify("Scan started", type="info")
+    global_scan_data = []
+
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=[],
+                y=[],
+                mode="markers",
+                marker=dict(color=[], colorscale="Inferno", showscale=True),
+            )
+        ]
+    )
+    fig.update_layout(
+        title="Live 2D Spectrometer Scan Map",
+        margin=dict(l=40, r=20, t=40, b=20),
+        xaxis=dict(title="X Position", scaleanchor="y", scaleratio=1),
+        yaxis=dict(title="Y Position"),
+        uirevision="true",
+    )
+
+    with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
+      ui.label("Scan Results Map (Live -> 3D)").classes("text-h6 font-bold")
+
+      dialog_plot = ui.plotly(fig).classes("w-full h-[500px]")
+
+      json_str_ref = {"data": "[]"}
+
+      def download_json():
+        ui.run_javascript(f"""
+                const blob = new Blob([{json.dumps(json_str_ref['data'])}], {{type: 'application/json'}});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'all_spectrums_data.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            """)
+
+      def download_png():
+        try:
+          img_bytes = fig.to_image(format="png", width=1000, height=800, scale=2)
+          ui.download(img_bytes, filename="spectrometer_scan_map.png")
+          ui.notify("Downloading plot image...", type="positive")
+        except Exception as e:
+          ui.notify(f"Failed to export image: {e}", type="negative")
+          print(f"PNG Export Error: {e}")
+
+      with ui.row().classes("w-full justify-end gap-2 mt-auto"):
+        ui.button("Save JSON", on_click=download_json).props("color=green")
+        ui.button("Save PNG", on_click=download_png).props("color=green")
+        ui.button("Close", on_click=map_dialog.close).props("color=red flat")
+        ui.button("STOP SCANNING", on_click=stopScan).props("color=red")
+
+      map_dialog.open()
+
+    try:
+      current_state = dict(state)
+      nx = int(current_state["nx"])
+      ny = int(current_state["ny"])
+      delta_x = current_state["deltaX"]
+      delta_y = current_state["deltaY"]
+      device = sp.get_spectrometer(simulation=False)
+
+      sx = Decimal(float(delta_x / nx) * 0.01) if nx > 0 else Decimal(0)
+      sy = Decimal(float(delta_y / ny) * 0.01) if ny > 0 else Decimal(0)
+
+      if delta_x <= 4 or delta_y <= 4:
+        for i in range(ny):
+          if stopScan:
+            break
+          target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
+          await run.io_bound(PiezoCH_Y.SetPosition, target_y)
+          await asyncio.sleep(0.05)
+
+          for j in range(nx):
+            if stopScan:
+              break
+            target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
+            await run.io_bound(PiezoCH_X.SetPosition, target_x)
+            await asyncio.sleep(0.05)
+            await asyncio.sleep(integr_time * 0.000001 + 0.05)
+
+            wavelengths = await run.io_bound(device.get_wavelengths)
+            intensities = await run.io_bound(device.get_intensities)
+            peak_intensity = float(np.max(intensities))
+
+            new_point = {
+                "x": float(target_x),
+                "y": float(target_y),
+                "peak_intensity": peak_intensity,
+                "wavelengths": wavelengths.tolist(),
+                "intensities": intensities.tolist(),
+            }
+            global_scan_data.append(new_point)
+            df = pd.DataFrame(global_scan_data)
+
+            fig.data[0].x = df["x"]
+            fig.data[0].y = df["y"]
+            fig.data[0].marker.color = df["peak_intensity"]
+            dialog_plot.update()
+      else:
+        for i in range(ny):
+          if stopScan:
+            break
+          for j in range(nx):
+            if stopScan:
+              break
+
+            wavelengths = await run.io_bound(device.get_wavelengths)
+            intensities = await run.io_bound(device.get_intensities)
+            peak_intensity = float(np.max(intensities))
+
+            new_point = {
+                "x": j,
+                "y": i,
+                "peak_intensity": peak_intensity,
+                "wavelengths": wavelengths.tolist(),
+                "intensities": intensities.tolist(),
+            }
+            global_scan_data.append(new_point)
+            df = pd.DataFrame(global_scan_data)
+
+            fig.data[0].x = df["x"]
+            fig.data[0].y = df["y"]
+            fig.data[0].marker.color = df["peak_intensity"]
+            dialog_plot.update()
+
+            await run.io_bound(CH_X.MoveRelative, MotorDirection.Forward, sx, timeout)
+            await asyncio.sleep(integr_time * 0.000001 + 0.05)
+
+          await run.io_bound(CH_Y.MoveRelative, MotorDirection.Forward, sy, timeout)
+          await run.io_bound(CH_X.MoveRelative, MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
+          await asyncio.sleep(0.05)
+
+        if global_scan_data and not stopScan:
+          ui.notify("Scan done! Converting to 3D Surface...", type="positive")
+          json_str_ref["data"] = json.dumps(global_scan_data, indent=4)
+
+          df = pd.DataFrame(global_scan_data)
+          pivot_df = df.pivot(index="y", columns="x", values="peak_intensity")
+          z_data = pivot_df.values
+          x_data = pivot_df.columns.tolist()
+          y_data = pivot_df.index.tolist()
+
+          new_fig = go.Figure(
+            data=[go.Surface(z=z_data, x=x_data, y=y_data, colorscale="Inferno")]
+          )
+          fig.update_layout(
+            title="3D Spectrometer Scan Surface Map",
+            scene=dict(
+              xaxis_title="X Position",
+              yaxis_title="Y Position",
+              zaxis_title="Peak Intensity",
+              aspectmode="auto",
+            ),
+            margin=dict(l=20, r=20, t=40, b=20),
+          )
+          dialog_plot.update_figure(new_fig)
+        else:
+          ui.notify("Scan finished or stopped, no complete data set.", type="warning")
+
+    except Exception as e:
+      print(f"ERROR DURING LIVE SCAN: {e}")
+      ui.notify(f"Error during scan: {e}", type="negative")
+
+
+#SPECTROMETER CONTROL============================================================================================================================
 
 
 integr_time = 10000
@@ -447,620 +679,3 @@ def update_plot(plot_ui_element):
 
 global_scan_data = []
 
-
-def _run_heavy_scan(current_state):
-  scan_data = []
-  global stopScan
-  stopScan = False
-  nx = int(current_state["nx"])
-  ny = int(current_state["ny"])
-  delta_x = current_state["deltaX"]
-  delta_y = current_state["deltaY"]
-  device = sp.get_spectrometer(simulation=False)
-
-
-
-  sx = Decimal(float(delta_x / nx) * 0.01)
-  sy = Decimal(float(delta_y / ny) * 0.01)
-
-  if delta_x <= 4 or delta_y <= 4:
-    for i in range(ny):
-      if stopScan:
-        break
-      target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
-      PiezoCH_Y.SetPosition(target_y)
-      time.sleep(0.05)
-
-      for j in range(nx):
-        if stopScan:
-          break
-
-        target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
-        PiezoCH_X.SetPosition(target_x)
-        time.sleep(0.05)
-
-        time.sleep(integr_time * 0.000001 + 0.05)
-
-        wavelengths = device.get_wavelengths()
-        intensities = device.get_intensities()
-        peak_intensity = float(np.max(intensities))
-
-        scan_data.append({
-            "x": float(target_x),
-            "y": float(target_y),
-            "peak_intensity": peak_intensity,
-            "wavelengths": wavelengths.tolist(),
-            "intensities": intensities.tolist(),
-        })
-  else:
-    for i in range(ny):
-      if stopScan:
-        break
-      for j in range(nx):
-        if stopScan:
-          break
-
-        wavelengths = device.get_wavelengths()
-        intensities = device.get_intensities()
-        peak_intensity = float(np.max(intensities))
-
-        scan_data.append({
-          "x": j,
-          "y": i,
-          "peak_intensity": peak_intensity,
-          "wavelengths": wavelengths.tolist(),
-          "intensities": intensities.tolist(),
-        })
-
-        CH_X.MoveRelative(MotorDirection.Forward, sx, timeout)
-        time.sleep(integr_time * 0.000001 + 0.05)
-
-
-
-      CH_Y.MoveRelative(MotorDirection.Forward, sy, timeout)
-      CH_X.MoveRelative(MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
-      time.sleep(0.05)
-
-  return scan_data
-
-
-async def specroScan():
-  global global_scan_data
-  ui.notify("Scan started", type="info")
-
-  try:
-    current_state = dict(state)
-
-    global_scan_data = await run.io_bound(_run_heavy_scan, current_state)
-
-    if global_scan_data:
-      ui.notify("Scan done!", type="positive")
-      show_map_dialog()
-    else:
-      ui.notify("Scan finished, but no data was collected.", type="warning")
-
-  except Exception as e:
-    print(f"ERROR DURING SCAN: {e}")
-    ui.notify(f"Error during scan: {e}", type="negative")
-
-
-def show_map_dialog():
-  df = pd.DataFrame(global_scan_data)
-
-  fig = px.scatter(
-      df,
-      x="x",
-      y="y",
-      color="peak_intensity",
-      color_continuous_scale="Viridis",
-      title="2D Spectrometer Scan Map",
-      labels={
-          "x": "X Position",
-          "y": "Y Position",
-          "peak_intensity": "Peak Intensity",
-      },
-  )
-  fig.update_layout(
-      xaxis=dict(scaleanchor="y", scaleratio=1),
-      margin=dict(l=20, r=20, t=40, b=20),
-  )
-
-  with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
-    ui.label("Scan Results Map").classes("text-h6 font-bold")
-    ui.plotly(fig).classes("w-full h-[500px]")
-
-    with ui.row().classes("w-full justify-end gap-2 mt-auto"):
-
-      json_str = json.dumps(global_scan_data, indent=4)
-
-      def download_json():
-        ui.run_javascript(f"""
-                const blob = new Blob([{json.dumps(json_str)}], {{type: 'application/json'}});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'all_spectrums_data.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            """)
-
-      def download_png():
-        try:
-
-            img_bytes = fig.to_image(format="png", width=1000, height=800, scale=2)
-            ui.download(img_bytes, filename="spectrometer_scan_map.png")
-            ui.notify("Downloading plot image...", type="positive")
-        except Exception as e:
-            ui.notify(f"Failed to export image: {e}", type="negative")
-            print(f"PNG Export Error: {e}")
-
-
-
-      ui.button("Save JSON", on_click=download_json).props("color=green")
-      ui.button("Save PNG", on_click=download_png).props("color=green")
-      ui.button("Close", on_click=map_dialog.close).props("color=red flat")
-      ui.button("STOP SCAN", on_click=stopScan).props("color=red flat")
-
-    map_dialog.open()
-
-
-def StopScan():
-  global stopScan
-  stopScan = True
-  ui.notify(f"stop scan", type="negative")
-
-
-def update_live_positions():
-  global CH_X, CH_Y, CH_Z, PiezoCH_X, PiezoCH_Y, PiezoCH_Z
-  try:
-    if CH_X is not None:
-      if hasattr(CH_X, "Position"):
-        state["x_live_pos"] = float(str(CH_X.Position))
-
-    if CH_Y is not None:
-      if hasattr(CH_Y, "Position"):
-        state["y_live_pos"] = float(str(CH_Y.Position))
-
-    if CH_Z is not None:
-      if hasattr(CH_Z, "Position"):
-        state["z_live_pos"] = float(str(CH_Z.Position))
-
-    if PiezoCH_X is not None and hasattr(PiezoCH_X, "GetPosition"):
-      state["pzt_x_live"] = float(str(PiezoCH_X.GetPosition()))
-
-    if PiezoCH_Y is not None and hasattr(PiezoCH_Y, "GetPosition"):
-      state["pzt_y_live"] = float(str(PiezoCH_Y.GetPosition()))
-
-    if PiezoCH_Z is not None and hasattr(PiezoCH_Z, "GetPosition"):
-      state["pzt_z_live"] = float(str(PiezoCH_Z.GetPosition()))
-
-  except Exception as e:
-    print(f"Error with data update: {e}")
-
-
-async def specroScan3():
-  global global_scan_data
-  ui.notify("Scan started", type="info")
-
-  try:
-    current_state = dict(state)
-
-    global_scan_data = await run.io_bound(_run_heavy_scan, current_state)
-
-    if global_scan_data:
-      ui.notify("Scan done!", type="positive")
-      map_dialog_3d()
-    else:
-      ui.notify("Scan finished, but no data was collected.", type="warning")
-
-  except Exception as e:
-    print(f"ERROR DURING SCAN: {e}")
-    ui.notify(f"Error during scan: {e}", type="negative")
-
-
-def map_dialog_3d():
-  df = pd.DataFrame(global_scan_data)
-
-
-  pivot_df = df.pivot(index="y", columns="x", values="peak_intensity")
-
-  z_data = pivot_df.values
-  x_data = pivot_df.columns.tolist()
-  y_data = pivot_df.index.tolist()
-
-
-  fig = go.Figure(
-      data=[
-          go.Surface(
-              z=z_data,
-              x=x_data,
-              y=y_data,
-              colorscale="Viridis",
-          )
-      ]
-  )
-
-  fig.update_layout(
-      title="3D Spectrometer Scan Surface Map",
-      scene=dict(
-          xaxis_title="X Position",
-          yaxis_title="Y Position",
-          zaxis_title="Peak Intensity",
-      ),
-      margin=dict(l=20, r=20, t=40, b=20),
-  )
-
-  with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
-    ui.label("Scan Results 3D Map").classes("text-h6 font-bold")
-    ui.plotly(fig).classes("w-full h-[500px]")
-
-    with ui.row().classes("w-full justify-end gap-2 mt-auto"):
-      json_str = json.dumps(global_scan_data, indent=4)
-
-      def download_json_3d():
-        ui.run_javascript(f"""
-                const blob = new Blob([{json.dumps(json_str)}], {{type: 'application/json'}});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'all_spectrums_data.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            """)
-
-      def download_png_3d():
-        try:
-          img_bytes = fig.to_image(format="png", width=1000, height=800, scale=2)
-          ui.download(img_bytes, filename="spectrometer_scan_3d_map.png")
-          ui.notify("Downloading plot image", type="positive")
-        except Exception as e:
-          ui.notify(f"Failed to export image: {e}", type="negative")
-          print(f"PNG Export Error: {e}")
-
-      ui.button("Save JSON", on_click=download_json_3d).props("color=green")
-      ui.button("Save PNG", on_click=download_png_3d).props("color=green")
-      ui.button("Close", on_click=map_dialog.close).props("color=red flat")
-
-    map_dialog_3d.open()
-
-
-async def specroScan_live():
-  global stopScan
-  stopScan = False
-  client = ui.context.client
-  asyncio.create_task(_run_specro_scan_live_background(client))
-
-
-async def _run_specro_scan_live_background(client):
-  with client:
-    global global_scan_data, stopScan
-    ui.notify("Scan started", type="info")
-    global_scan_data = []
-
-    fig = go.Figure(
-        data=[
-            go.Scatter(
-                x=[],
-                y=[],
-                mode="markers",
-                marker=dict(color=[], colorscale="Viridis", showscale=True),
-            )
-        ]
-    )
-    fig.update_layout(
-        title="Live 2D Spectrometer Scan Map",
-        margin=dict(l=40, r=20, t=40, b=20),
-        xaxis=dict(title="X Position", scaleanchor="y", scaleratio=1),
-        yaxis=dict(title="Y Position"),
-        uirevision="true",
-    )
-
-    with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
-      ui.label("Scan Results Map (Live)").classes("text-h6 font-bold")
-
-      dialog_plot = ui.plotly(fig).classes("w-full h-[500px]")
-
-      json_str_ref = {"data": "[]"}
-
-      def download_json():
-        ui.run_javascript(f"""
-                const blob = new Blob([{json.dumps(json_str_ref['data'])}], {{type: 'application/json'}});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'all_spectrums_data.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            """)
-
-      def download_png():
-        try:
-          img_bytes = fig.to_image(format="png", width=1000, height=800, scale=2)
-          ui.download(img_bytes, filename="spectrometer_scan_map.png")
-          ui.notify("Downloading plot image...", type="positive")
-        except Exception as e:
-          ui.notify(f"Failed to export image: {e}", type="negative")
-          print(f"PNG Export Error: {e}")
-
-      with ui.row().classes("w-full justify-end gap-2 mt-auto"):
-        ui.button("Save JSON", on_click=download_json).props("color=green")
-        ui.button("Save PNG", on_click=download_png).props("color=green")
-        ui.button("Close", on_click=map_dialog.close).props("color=red flat")
-
-      map_dialog.open()
-
-    try:
-      current_state = dict(state)
-      nx = int(current_state["nx"])
-      ny = int(current_state["ny"])
-      delta_x = current_state["deltaX"]
-      delta_y = current_state["deltaY"]
-      device = sp.get_spectrometer(simulation=False)
-
-      sx = Decimal(float(delta_x / nx) * 0.01) if nx > 0 else Decimal(0)
-      sy = Decimal(float(delta_y / ny) * 0.01) if ny > 0 else Decimal(0)
-
-      if delta_x <= 4 or delta_y <= 4:
-        for i in range(ny):
-          if stopScan:
-            break
-          target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
-          await run.io_bound(PiezoCH_Y.SetPosition, target_y)
-          await asyncio.sleep(0.05)
-
-          for j in range(nx):
-            if stopScan:
-              break
-            target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
-            await run.io_bound(PiezoCH_X.SetPosition, target_x)
-            await asyncio.sleep(0.05)
-            await asyncio.sleep(integr_time * 0.000001 + 0.05)
-
-            wavelengths = await run.io_bound(device.get_wavelengths)
-            intensities = await run.io_bound(device.get_intensities)
-            peak_intensity = float(np.max(intensities))
-
-            new_point = {
-                "x": float(target_x),
-                "y": float(target_y),
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
-            }
-            global_scan_data.append(new_point)
-            df = pd.DataFrame(global_scan_data)
-
-            fig.data[0].x = df["x"]
-            fig.data[0].y = df["y"]
-            fig.data[0].marker.color = df["peak_intensity"]
-            dialog_plot.update()
-      else:
-        for i in range(ny):
-          if stopScan:
-            break
-          for j in range(nx):
-            if stopScan:
-              break
-
-            wavelengths = await run.io_bound(device.get_wavelengths)
-            intensities = await run.io_bound(device.get_intensities)
-            peak_intensity = float(np.max(intensities))
-
-            new_point = {
-                "x": j,
-                "y": i,
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
-            }
-            global_scan_data.append(new_point)
-            df = pd.DataFrame(global_scan_data)
-
-            fig.data[0].x = df["x"]
-            fig.data[0].y = df["y"]
-            fig.data[0].marker.color = df["peak_intensity"]
-            dialog_plot.update()
-
-            await run.io_bound(CH_X.MoveRelative, MotorDirection.Forward, sx, timeout)
-            await asyncio.sleep(integr_time * 0.000001 + 0.05)
-
-          await run.io_bound(CH_Y.MoveRelative, MotorDirection.Forward, sy, timeout)
-          await run.io_bound(CH_X.MoveRelative, MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
-          await asyncio.sleep(0.05)
-
-      if global_scan_data:
-        ui.notify("Scan done!", type="positive")
-        json_str_ref["data"] = json.dumps(global_scan_data, indent=4)
-      else:
-        ui.notify("Scan finished, but no data was collected.", type="warning")
-
-    except Exception as e:
-      print(f"ERROR DURING LIVE SCAN: {e}")
-      ui.notify(f"Error during scan: {e}", type="negative")
-
-def specroScan_live3():
-  """Synchronous entry point called by the button to open dialog immediately and stream points live."""
-  global stopScan
-  stopScan = False
-  client = ui.context.client
-  asyncio.create_task(_run_specro_scan_live_background(client))
-
-
-async def _run_specro_scan_live_background(client):
-  with client:
-    global global_scan_data, stopScan
-    ui.notify("Scan started", type="info")
-    global_scan_data = []
-
-    # 1. Initialize a 2D Scatter Figure for live updating
-    fig = go.Figure(
-        data=[
-            go.Scatter(
-                x=[],
-                y=[],
-                mode="markers",
-                marker=dict(color=[], colorscale="Inferno", showscale=True),
-            )
-        ]
-    )
-    fig.update_layout(
-        title="Live 2D Spectrometer Scan Map",
-        margin=dict(l=40, r=20, t=40, b=20),
-        xaxis=dict(title="X Position", scaleanchor="y", scaleratio=1),
-        yaxis=dict(title="Y Position"),
-        uirevision="true",
-    )
-
-    # 2. Open the dialog immediately on click containing the figure
-    with ui.dialog() as map_dialog, ui.card().classes("w-[800px] h-[650px]"):
-      ui.label("Scan Results Map (Live -> 3D)").classes("text-h6 font-bold")
-
-      dialog_plot = ui.plotly(fig).classes("w-full h-[500px]")
-
-      json_str_ref = {"data": "[]"}
-
-      def download_json():
-        ui.run_javascript(f"""
-                const blob = new Blob([{json.dumps(json_str_ref['data'])}], {{type: 'application/json'}});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'all_spectrums_data.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            """)
-
-      def download_png():
-        try:
-          img_bytes = fig.to_image(format="png", width=1000, height=800, scale=2)
-          ui.download(img_bytes, filename="spectrometer_scan_map.png")
-          ui.notify("Downloading plot image...", type="positive")
-        except Exception as e:
-          ui.notify(f"Failed to export image: {e}", type="negative")
-          print(f"PNG Export Error: {e}")
-
-      with ui.row().classes("w-full justify-end gap-2 mt-auto"):
-        ui.button("Save JSON", on_click=download_json).props("color=green")
-        ui.button("Save PNG", on_click=download_png).props("color=green")
-        ui.button("Close", on_click=map_dialog.close).props("color=red flat")
-
-      map_dialog.open()
-
-    try:
-      current_state = dict(state)
-      nx = int(current_state["nx"])
-      ny = int(current_state["ny"])
-      delta_x = current_state["deltaX"]
-      delta_y = current_state["deltaY"]
-      device = sp.get_spectrometer(simulation=False)
-
-      sx = Decimal(float(delta_x / nx) * 0.01) if nx > 0 else Decimal(0)
-      sy = Decimal(float(delta_y / ny) * 0.01) if ny > 0 else Decimal(0)
-
-      # 3. Run scan loop step-by-step and update figure data live as 2D scatter
-      if delta_x <= 4 or delta_y <= 4:
-        for i in range(ny):
-          if stopScan:
-            break
-          target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
-          await run.io_bound(PiezoCH_Y.SetPosition, target_y)
-          await asyncio.sleep(0.05)
-
-          for j in range(nx):
-            if stopScan:
-              break
-            target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
-            await run.io_bound(PiezoCH_X.SetPosition, target_x)
-            await asyncio.sleep(0.05)
-            await asyncio.sleep(integr_time * 0.000001 + 0.05)
-
-            wavelengths = await run.io_bound(device.get_wavelengths)
-            intensities = await run.io_bound(device.get_intensities)
-            peak_intensity = float(np.max(intensities))
-
-            new_point = {
-                "x": float(target_x),
-                "y": float(target_y),
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
-            }
-            global_scan_data.append(new_point)
-            df = pd.DataFrame(global_scan_data)
-
-            fig.data[0].x = df["x"]
-            fig.data[0].y = df["y"]
-            fig.data[0].marker.color = df["peak_intensity"]
-            dialog_plot.update()
-      else:
-        for i in range(ny):
-          if stopScan:
-            break
-          for j in range(nx):
-            if stopScan:
-              break
-
-            wavelengths = await run.io_bound(device.get_wavelengths)
-            intensities = await run.io_bound(device.get_intensities)
-            peak_intensity = float(np.max(intensities))
-
-            new_point = {
-                "x": j,
-                "y": i,
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
-            }
-            global_scan_data.append(new_point)
-            df = pd.DataFrame(global_scan_data)
-
-            fig.data[0].x = df["x"]
-            fig.data[0].y = df["y"]
-            fig.data[0].marker.color = df["peak_intensity"]
-            dialog_plot.update()
-
-            await run.io_bound(CH_X.MoveRelative, MotorDirection.Forward, sx, timeout)
-            await asyncio.sleep(integr_time * 0.000001 + 0.05)
-
-          await run.io_bound(CH_Y.MoveRelative, MotorDirection.Forward, sy, timeout)
-          await run.io_bound(CH_X.MoveRelative, MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
-          await asyncio.sleep(0.05)
-
-        if global_scan_data and not stopScan:
-          ui.notify("Scan done! Converting to 3D Surface...", type="positive")
-          json_str_ref["data"] = json.dumps(global_scan_data, indent=4)
-
-          df = pd.DataFrame(global_scan_data)
-          pivot_df = df.pivot(index="y", columns="x", values="peak_intensity")
-          z_data = pivot_df.values
-          x_data = pivot_df.columns.tolist()
-          y_data = pivot_df.index.tolist()
-
-          new_fig = go.Figure(
-            data=[go.Surface(z=z_data, x=x_data, y=y_data, colorscale="Inferno")]
-          )
-          fig.update_layout(
-            title="3D Spectrometer Scan Surface Map",
-            scene=dict(
-              xaxis_title="X Position",
-              yaxis_title="Y Position",
-              zaxis_title="Peak Intensity",
-              aspectmode="auto",
-            ),
-            margin=dict(l=20, r=20, t=40, b=20),
-          )
-          dialog_plot.update_figure(new_fig)
-        else:
-          ui.notify("Scan finished or stopped, no complete data set.", type="warning")
-
-    except Exception as e:
-      print(f"ERROR DURING LIVE SCAN: {e}")
-      ui.notify(f"Error during scan: {e}", type="negative")

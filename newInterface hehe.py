@@ -48,7 +48,7 @@ with ui.row():
                 ui.number(label='Nx').bind_value(fn.state, 'nx')
                 ui.number(label='Ny').bind_value(fn.state, 'ny')
             with ui.row():
-                ui.button('SPECTRO SCAN', on_click=fn.specroScan_live)
+                ui.button('SPECTROMETER SCAN', on_click=fn.specroScan_live)
 
         with ui.card().style('width:375px;height:270px;'):
             ui.label('Current Position')
