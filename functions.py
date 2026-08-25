@@ -11,7 +11,7 @@ import time
 from nicegui import app, run, ui
 import spectra_lib as sp
 from merge import *
-from System import Decimal
+from System import Decimal, Math
 from Thorlabs.MotionControl.GenericPiezoCLI.Piezo import PiezoControlModeTypes
 import cv2
 import matplotlib
@@ -188,10 +188,10 @@ def update_camera(camera_image):
 
   except Exception as e:
     camera_consecutive_errors += 1
-    print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+    #print(f"Camera frame drop ({camera_consecutive_errors}):", e)
 
     if camera_consecutive_errors > 5:
-      print("Resetting camera connection...")
+      #print("Resetting camera connection...")
       try:
         if cam:
           cam.close()
@@ -463,21 +463,37 @@ async def _run_specro_scan_live_background(client):
       delta_y = current_state["deltaY"]
       device = sp.get_spectrometer(simulation=False)
 
-      sx = Decimal(float(delta_x / nx) * 0.01) if nx > 0 else Decimal(0)
-      sy = Decimal(float(delta_y / ny) * 0.01) if ny > 0 else Decimal(0)
+      def round_dec(dec_val, decimals=4):
+        factor = Decimal(1)
+        for _ in range(decimals):
+          factor = factor * Decimal(10)
+        return Decimal.Round(dec_val * factor) / factor
+
+      nx_dec = Decimal(nx) if nx > 0 else Decimal(1)
+      ny_dec = Decimal(ny) if ny > 0 else Decimal(1)
+      dec_one = Decimal(1)
+      dec_hundred = Decimal(100)
+
+      sx = round_dec((Decimal(delta_x) / nx_dec) * (dec_one / dec_hundred), 4)
+      sy = round_dec((Decimal(delta_y) / ny_dec) * (dec_one / dec_hundred), 4)
 
       if delta_x <= 4 or delta_y <= 4:
+        step_y = round_dec(Decimal(delta_y) / ny_dec, 4) if ny > 1 else Decimal(0)
+        step_x = round_dec(Decimal(delta_x) / nx_dec, 4) if nx > 1 else Decimal(0)
+
         for i in range(ny):
           if stopScan:
             break
-          target_y = Decimal(i * (delta_y / ny if ny > 1 else 0))
+
+          target_y = round_dec(Decimal(i) * step_y, 4)
           await run.io_bound(PiezoCH_Y.SetPosition, target_y)
           await asyncio.sleep(0.05)
 
           for j in range(nx):
             if stopScan:
               break
-            target_x = Decimal(j * (delta_x / nx if nx > 1 else 0))
+
+            target_x = round_dec(Decimal(j) * step_x, 4)
             await run.io_bound(PiezoCH_X.SetPosition, target_x)
             await asyncio.sleep(0.05)
             await asyncio.sleep(integr_time * 0.000001 + 0.05)
@@ -487,11 +503,11 @@ async def _run_specro_scan_live_background(client):
             peak_intensity = float(np.max(intensities))
 
             new_point = {
-                "x": float(target_x),
-                "y": float(target_y),
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
+              "x": float(target_x),
+              "y": float(target_y),
+              "peak_intensity": peak_intensity,
+              "wavelengths": wavelengths.tolist(),
+              "intensities": intensities.tolist(),
             }
             global_scan_data.append(new_point)
             df = pd.DataFrame(global_scan_data)
@@ -513,11 +529,11 @@ async def _run_specro_scan_live_background(client):
             peak_intensity = float(np.max(intensities))
 
             new_point = {
-                "x": j,
-                "y": i,
-                "peak_intensity": peak_intensity,
-                "wavelengths": wavelengths.tolist(),
-                "intensities": intensities.tolist(),
+              "x": j,
+              "y": i,
+              "peak_intensity": peak_intensity,
+              "wavelengths": wavelengths.tolist(),
+              "intensities": intensities.tolist(),
             }
             global_scan_data.append(new_point)
             df = pd.DataFrame(global_scan_data)
@@ -531,8 +547,11 @@ async def _run_specro_scan_live_background(client):
             await asyncio.sleep(integr_time * 0.000001 + 0.05)
 
           await run.io_bound(CH_Y.MoveRelative, MotorDirection.Forward, sy, timeout)
-          await run.io_bound(CH_X.MoveRelative, MotorDirection.Backward, Decimal(float(delta_x) * 0.01), timeout)
+
+          return_x = round_dec(Decimal(delta_x) * (dec_one / dec_hundred), 4)
+          await run.io_bound(CH_X.MoveRelative, MotorDirection.Backward, return_x, timeout)
           await asyncio.sleep(0.05)
+
 
         if global_scan_data and not stopScan:
           ui.notify("Scan done! Converting to 3D Surface...", type="positive")

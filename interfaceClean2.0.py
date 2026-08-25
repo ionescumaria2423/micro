@@ -3,7 +3,7 @@ from nicegui import app, ui
 
 app.on_startup(fn.handle_startup)
 
-ui.label('Control').classes('text-h4')
+ui.label('CONTROL').classes('text-h4')
 
 with ui.row():
     with ui.card():

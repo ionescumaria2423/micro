@@ -32,10 +32,6 @@ def start():
     print(DeviceManagerCLI.GetDeviceList())
 
     CH_X, CH_Y, CH_Z, stepper_device = init_BSC(serial_Stepper)
-
-    # print(CH_X.DeviceID)
-    # print(CH_Y.DeviceID)
-    # print(CH_Z.DeviceID)
     stepSize = Decimal(0.05)
     timeout = 30000
 

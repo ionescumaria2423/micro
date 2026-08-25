@@ -5,13 +5,13 @@ from nicegui import app, ui
 app.on_startup(fn.handle_startup)
 
 with ui.row():
-    ui.label('Control').classes('text-h4')
+    ui.label('CONTROL').classes('text-h4')
     ui.button("START", on_click=lambda:fn.connect())
 
 
 with ui.row():
     with ui.card().style('width:620px;height:600px;'):
-        ui.label('Camera')
+        ui.label('CAMERA')
         camera_image = ui.interactive_image().style('width:620px;height:480px;')
         ui.button('TAKE PICTURE', on_click=fn.takePic).classes('w-full')
 
@@ -45,8 +45,8 @@ with ui.row():
                 ui.number(label='ΔX - MICROMETERS').bind_value(fn.state, 'deltaX')
                 ui.number(label='ΔY - MICROMETERS').bind_value(fn.state, 'deltaY')
             with ui.row():
-                ui.number(label='Nx').bind_value(fn.state, 'nx')
-                ui.number(label='Ny').bind_value(fn.state, 'ny')
+                ui.number(label='NUMBER POINTS X').bind_value(fn.state, 'nx')
+                ui.number(label='NUMBER POINTS Y').bind_value(fn.state, 'ny')
             with ui.row():
                 ui.button('SPECTROMETER SCAN', on_click=fn.specroScan_live)
 
