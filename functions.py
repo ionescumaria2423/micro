@@ -15,7 +15,6 @@ from System import Decimal, Math
 from Thorlabs.MotionControl.GenericPiezoCLI.Piezo import PiezoControlModeTypes
 import cv2
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import json
 import time
@@ -25,7 +24,7 @@ import plotly.express as px
 from nicegui import ui
 import kaleido
 import plotly.graph_objects as go
-
+matplotlib.use("Agg")
 
 #STATES========================================================================================================================================
 
@@ -80,6 +79,7 @@ stopScan = False
 cam = None
 camera_consecutive_errors = 0
 camera_timer = None
+CAMERA_INDEX = 0
 
 #INITIALIZATION AND CONNECT======================================================================================================================
 
@@ -158,10 +158,92 @@ async def connect():
 #CAMERA========================================================================================================================================
 
 
+# def get_camera():
+#   global cam
+#   if cam is None and uc480 is not None:
+#     cam = uc480.UC480Camera()
+#   return cam
+#
+#
+# def update_camera(camera_image):
+#   global cam, camera_consecutive_errors
+#
+#   try:
+#     camera = get_camera()
+#     if camera is None:
+#       return
+#
+#     frame = camera.snap()
+#
+#     if frame is not None and frame.size > 0:
+#       frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+#       frame = frame.astype(np.uint8)
+#       frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+#
+#       _, jpg = cv2.imencode(".jpg", frame)
+#       encoded = base64.b64encode(jpg).decode("utf-8")
+#
+#       camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
+#       camera_consecutive_errors = 0
+#
+#   except Exception as e:
+#     camera_consecutive_errors += 1
+    #print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+
+    # if camera_consecutive_errors > 5:
+    #   print("Resetting camera connection...")
+    #   try:
+    #     if cam:
+    #       cam.close()
+    #   except Exception:
+    #     pass
+    #   cam = None
+    #   camera_consecutive_errors = 0
+#
+#
+# def takePic():
+#   try:
+#     downloads_path = str(Path.home() / "Downloads")
+#
+#     camera = get_camera()
+#     if camera is None:
+#       ui.notify("Error: Camera initialization failed.", type="negative")
+#       return
+#
+#     frame = camera.snap()
+#
+#     if frame is None or frame.size == 0:
+#       ui.notify(
+#           "Error: Could not grab frame from active stream.", type="negative"
+#       )
+#       return
+#
+#     frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+#     frame = frame.astype(np.uint8)
+#
+#     if len(frame.shape) == 2 or frame.shape[2] == 1:
+#       frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+#
+#     timestamp = time.strftime("%Y%m%d-%H%M%S")
+#     filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
+#
+#     success = cv2.imwrite(filepath, frame)
+#
+#     if success:
+#       ui.notify("Saved in Downloads!", type="positive")
+#     else:
+#       ui.notify("Could not save.", type="negative")
+#
+#   except Exception as e:
+#     ui.notify(f"Snapshot Error: {e}", type="negative")
+
+
 def get_camera():
   global cam
-  if cam is None and uc480 is not None:
-    cam = uc480.UC480Camera()
+  if cam is None or not cam.isOpened():
+    cam = cv2.VideoCapture(CAMERA_INDEX)
+    if not cam.isOpened():
+      return None
   return cam
 
 
@@ -173,28 +255,27 @@ def update_camera(camera_image):
     if camera is None:
       return
 
-    frame = camera.snap()
+    ret, frame = camera.read()
 
-    if frame is not None and frame.size > 0:
-      frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
-      frame = frame.astype(np.uint8)
-      frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-
+    if ret and frame is not None and frame.size > 0:
+      # OpenCV natively captures in BGR, encode directly to JPEG
       _, jpg = cv2.imencode(".jpg", frame)
       encoded = base64.b64encode(jpg).decode("utf-8")
 
       camera_image.set_source(f"data:image/jpeg;base64,{encoded}")
       camera_consecutive_errors = 0
+    else:
+      raise Exception("Failed to read frame from webcam.")
 
   except Exception as e:
     camera_consecutive_errors += 1
-    #print(f"Camera frame drop ({camera_consecutive_errors}):", e)
+    # print(f"Camera frame drop ({camera_consecutive_errors}):", e)
 
     if camera_consecutive_errors > 5:
-      #print("Resetting camera connection...")
+      # print("Resetting camera connection...")
       try:
         if cam:
-          cam.close()
+          cam.release()
       except Exception:
         pass
       cam = None
@@ -210,19 +291,13 @@ def takePic():
       ui.notify("Error: Camera initialization failed.", type="negative")
       return
 
-    frame = camera.snap()
+    ret, frame = camera.read()
 
-    if frame is None or frame.size == 0:
+    if not ret or frame is None or frame.size == 0:
       ui.notify(
           "Error: Could not grab frame from active stream.", type="negative"
       )
       return
-
-    frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
-    frame = frame.astype(np.uint8)
-
-    if len(frame.shape) == 2 or frame.shape[2] == 1:
-      frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     filepath = os.path.join(downloads_path, f"snapshot_{timestamp}.jpg")
@@ -236,6 +311,10 @@ def takePic():
 
   except Exception as e:
     ui.notify(f"Snapshot Error: {e}", type="negative")
+
+
+
+
 
 
 #STEPPER CONTROLS================================================================================================================================
